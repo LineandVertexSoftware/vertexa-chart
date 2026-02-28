@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": [],
+    "baseUrl": ".",
+	"paths": {
+		"@vertexa-chart/overlay-d3": ["./packages/overlay-d3/src/index.ts"],
+		"@vertexa-chart/renderer-webgpu": ["./packages/renderer-webgpu/src/index.ts"],
+		"@vertexa-chart/vertexa-chart-core": ["./packages/vertexa-chart-core/src/index.ts"]
+	}
+  }
+}
