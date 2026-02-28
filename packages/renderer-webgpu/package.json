@@ -1,0 +1,55 @@
+{
+  "name": "@vertexa-chart/renderer-webgpu",
+  "version": "0.1.0",
+  "description": "WebGPU rendering engine for high-performance visualization",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && node scripts/copy-shaders.js",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@webgpu/types": "^0.1.68",
+    "typescript": "^5.6.3"
+  },
+  "sideEffects": false,
+  "keywords": [
+    "webgpu",
+    "gpu",
+    "rendering",
+    "graphics",
+    "shaders"
+  ],
+  "author": "Vertexa contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/art/vertexa-chart.git",
+    "directory": "packages/renderer-webgpu"
+  },
+  "homepage": "https://github.com/art/vertexa-chart#readme",
+  "bugs": {
+    "url": "https://github.com/art/vertexa-chart/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

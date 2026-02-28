@@ -1,0 +1,61 @@
+{
+  "name": "@vertexa-chart/vertexa-chart-core",
+  "version": "0.1.0",
+  "description": "High-performance charting library using WebGPU and D3.js",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "test": "pnpm build && node --experimental-test-module-mocks --test test/*.test.mjs",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "prepublishOnly": "pnpm build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@vertexa-chart/overlay-d3": "workspace:*",
+    "@vertexa-chart/renderer-webgpu": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "sideEffects": false,
+  "keywords": [
+    "webgpu",
+    "d3",
+    "charts",
+    "visualization",
+    "gpu",
+    "performance",
+    "plotting"
+  ],
+  "author": "Vertexa contributors",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/art/vertexa-chart.git",
+    "directory": "packages/vertexa-chart-core"
+  },
+  "homepage": "https://github.com/art/vertexa-chart#readme",
+  "bugs": {
+    "url": "https://github.com/art/vertexa-chart/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

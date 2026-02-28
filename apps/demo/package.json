@@ -1,0 +1,18 @@
+{
+  "name": "demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:visual": "node test/visual-regression.mjs"
+  },
+  "dependencies": {
+    "@vertexa-chart/vertexa-chart-core": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3",
+    "vite": "^5.4.10"
+  }
+}
