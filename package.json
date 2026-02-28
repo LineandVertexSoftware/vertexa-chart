@@ -1,18 +1,26 @@
 {
-  "name": "demo",
+  "name": "vertexa-chart-monorepo",
   "private": true,
-  "type": "module",
+  "packageManager": "pnpm@9.12.0",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "test:visual": "node test/visual-regression.mjs"
-  },
-  "dependencies": {
-    "@vertexa-chart/vertexa-chart-core": "workspace:*"
-  },
-  "devDependencies": {
-    "typescript": "^5.6.3",
-    "vite": "^5.4.10"
+    "dev": "pnpm -C apps/demo dev",
+    "build": "pnpm -r --filter './packages/**' --sort build",
+    "build:demo": "pnpm -C apps/demo build",
+    "clean": "pnpm -r clean",
+    "clean:all": "pnpm clean && rm -rf node_modules apps/demo/node_modules packages/*/node_modules .pnpm-store",
+    "typecheck": "pnpm -r --filter './packages/**' --sort build && pnpm -r --filter './packages/**' typecheck",
+    "test": "pnpm -r test",
+    "pack:check": "pnpm -r --filter './packages/**' exec npm pack --dry-run",
+    "release:check": "pnpm clean && pnpm install && pnpm build && pnpm typecheck && pnpm test && pnpm pack:check",
+    "test:visual": "pnpm -C apps/demo test:visual",
+    "preview": "pnpm -C apps/demo preview",
+    "publish:packages": "pnpm -r --filter './packages/**' publish",
+    "version:patch": "pnpm -r --filter './packages/**' exec npm version patch",
+    "version:minor": "pnpm -r --filter './packages/**' exec npm version minor",
+    "version:major": "pnpm -r --filter './packages/**' exec npm version major"
   }
 }
