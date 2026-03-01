@@ -2658,7 +2658,7 @@ export class Chart implements ChartPublicApi {
       .replaceAll("%{x}", escapeHtml(fmtDatum(hit.x)))
       .replaceAll("%{y}", escapeHtml(fmtDatum(hit.y)))
       .replaceAll("%{z}", escapeHtml(fmtNumber(zValue)))
-      .replaceAll("%{pointIndex}", String(hit.pointIndex))
+      .replaceAll("%{pointIndex}", escapeHtml(String(hit.pointIndex)))
       .replaceAll("%{trace.name}", escapeHtml(String(trace.name ?? "")));
   }
 
@@ -2696,7 +2696,7 @@ export class Chart implements ChartPublicApi {
     } else if (this.tooltipFormatter) {
       this.tooltip.textContent = String(this.tooltipFormatter(context));
     } else if (context.trace.hovertemplate) {
-      this.tooltip.innerHTML = context.defaultLabel;
+      this.tooltip.textContent = context.defaultLabel;
     } else {
       this.tooltip.textContent = context.defaultLabel;
     }
