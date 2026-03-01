@@ -18,4 +18,4 @@ This package is primarily intended as an internal rendering module for
 `@vertexa-chart/vertexa-chart-core`.
 
 For full docs and examples, see:
-[https://github.com/art/vertexa-chart#readme](https://github.com/art/vertexa-chart#readme)
+[https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md](https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md)
