@@ -183,6 +183,8 @@ export class OverlayD3 {
   private selectionStart: { xPlot: number; yPlot: number } | null = null;
   private lassoPoints: Array<{ xPlot: number; yPlot: number }> = [];
   private suppressClickUntil = 0;
+  private _dragMoveHandler: ((e: MouseEvent) => void) | null = null;
+  private _dragUpHandler: ((e: MouseEvent) => void) | null = null;
 
   constructor(private opts: OverlayOptions) {
     this.svgSel = d3.select(opts.svg);
@@ -544,6 +546,8 @@ export class OverlayD3 {
         this.selectionPath.attr("visibility", "hidden").attr("d", "");
         window.removeEventListener("mousemove", onMove);
         window.removeEventListener("mouseup", finishSelection);
+        this._dragMoveHandler = null;
+        this._dragUpHandler = null;
 
         const zx = this.currentT.rescaleX(this.baseX);
         const zy = this.currentT.rescaleY(this.baseY);
@@ -611,6 +615,8 @@ export class OverlayD3 {
         });
       };
 
+      this._dragMoveHandler = onMove;
+      this._dragUpHandler = finishSelection;
       window.addEventListener("mousemove", onMove);
       window.addEventListener("mouseup", finishSelection);
     });
@@ -645,6 +651,29 @@ export class OverlayD3 {
   resetZoom() {
     if (!this.zoomBehavior) return;
     this.zoomRect.call(this.zoomBehavior.transform as any, d3.zoomIdentity);
+  }
+
+  destroy() {
+    if (this._dragMoveHandler) {
+      window.removeEventListener("mousemove", this._dragMoveHandler);
+      this._dragMoveHandler = null;
+    }
+    if (this._dragUpHandler) {
+      window.removeEventListener("mouseup", this._dragUpHandler);
+      this._dragUpHandler = null;
+    }
+    if (this.zoomBehavior) {
+      this.zoomRect.on(".zoom", null);
+      this.zoomBehavior = null;
+    }
+    this.zoomRect
+      .on("mousemove", null)
+      .on("click", null)
+      .on("mouseleave", null)
+      .on("mousedown.selection", null);
+    this.gRoot.remove();
+    this.gGridRoot?.remove();
+    this.gLegend.remove();
   }
 
   private makeLassoPath(points: Array<{ xPlot: number; yPlot: number }>) {

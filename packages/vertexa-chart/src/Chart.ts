@@ -876,6 +876,7 @@ export class Chart implements ChartPublicApi {
     this.gridRebuildPending = false;
 
     this.overlay?.setHoverGuides(null);
+    this.overlay?.destroy();
     this.renderer.setHoverHighlight(null);
     this.renderer.destroy();
 
