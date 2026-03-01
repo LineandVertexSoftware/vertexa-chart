@@ -8,7 +8,11 @@ struct PickUniforms {
   baseId       : u32,     // offset 48
   pointCount   : u32,     // offset 52
   lodStride    : u32,     // offset 56
-  lodOffset    : u32      // offset 60
+  lodOffset    : u32,     // offset 60
+  firstPoint   : u32,     // offset 64 - ring-buffer physical start index
+  _pad1        : u32,     // offset 68
+  _pad2        : u32,     // offset 72
+  _pad3        : u32      // offset 76
 };
 
 @group(0) @binding(0) var<uniform> U : PickUniforms;
@@ -32,15 +36,15 @@ fn px_to_clip(p: vec2f) -> vec2f {
 
 @vertex
 fn vs_main(input: VSIn) -> VSOut {
-  let pointIdx = input.inst * U.lodStride + U.lodOffset;
-  let p = P[pointIdx];
+  let logicalIdx = input.inst * U.lodStride + U.lodOffset;
+  let p = P[logicalIdx + U.firstPoint];
   var ptPx = U.plotOrigin + (p * U.plotSize) * U.zoom.x + vec2f(U.zoom.y, U.zoom.z);
   let offsetPx = input.corner * U.pointSizePx;
   let clip = px_to_clip(ptPx + offsetPx);
 
   var out: VSOut;
   out.pos = vec4f(clip, 0.0, 1.0);
-  out.gid = U.baseId + pointIdx + 1u;//0 reserved as none
+  out.gid = U.baseId + logicalIdx + 1u;//0 reserved as none
   return out;
 }
 

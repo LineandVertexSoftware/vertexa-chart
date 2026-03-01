@@ -208,6 +208,12 @@ export class Chart implements ChartPublicApi {
   // GPU id mapping (markers only)
   private idRanges: { baseId: number; count: number; traceIndex: number }[] = [];
 
+  // Fast-path append: trace → GPU layer index mapping (populated by compileScene)
+  private traceToMarkerLayerIdx = new Map<number, number>();
+  private traceToLineLayerIdxs = new Map<number, number[]>();
+  // markerNormByTrace entries that need lazy rebuild before getNormPoint() can use them
+  private markerNormByTraceDirty = new Set<number>();
+
   // Hover sorting for hovermode x/y (only built for smaller traces)
   private xSorted: { traceIndex: number; order: Uint32Array; xsNum: Float64Array }[] = [];
   private ySorted: { traceIndex: number; order: Uint32Array; ysNum: Float64Array }[] = [];
@@ -381,6 +387,16 @@ export class Chart implements ChartPublicApi {
 
     const defaultMaxPoints = normalizeMaxPoints(options?.maxPoints);
 
+    // Pre-compute new data and trim counts in a single pass so tryAppendFast has all context
+    type PreparedUpdate = {
+      update: ChartAppendPointsUpdate;
+      xNew: Datum[];
+      yNew: Datum[];
+      nNew: number;
+      trimCount: number;
+    };
+    const prepared: PreparedUpdate[] = [];
+
     for (const update of updateList) {
       const trace = this.traces[update.traceIndex];
       if (!trace) {
@@ -390,34 +406,42 @@ export class Chart implements ChartPublicApi {
         throw new Error(`Chart.appendPoints(): traceIndex ${update.traceIndex} is a heatmap trace; use setTraces().`);
       }
 
-      const xIn = Array.from(update.x);
-      const yIn = Array.from(update.y);
-      const n = Math.min(xIn.length, yIn.length);
-      if (n <= 0) continue;
-
-      const xOut = toMutableDatumArray(trace.x);
-      const yOut = toMutableDatumArray(trace.y);
-
-      for (let i = 0; i < n; i++) {
-        xOut.push(xIn[i]);
-        yOut.push(yIn[i]);
-      }
+      const xNew = Array.from(update.x);
+      const yNew = Array.from(update.y);
+      const nNew = Math.min(xNew.length, yNew.length);
 
       const maxPoints = normalizeMaxPoints(update.maxPoints) ?? defaultMaxPoints;
-      if (maxPoints !== undefined && xOut.length > maxPoints) {
-        const trimCount = xOut.length - maxPoints;
+      const currentLen = Math.min(trace.x.length, trace.y.length);
+      const trimCount = maxPoints !== undefined ? Math.max(0, currentLen + nNew - maxPoints) : 0;
+
+      prepared.push({ update, xNew, yNew, nNew, trimCount });
+    }
+
+    // Mutate traces
+    for (const { update, xNew, yNew, nNew, trimCount } of prepared) {
+      if (nNew <= 0) continue;
+      const trace = this.traces[update.traceIndex];
+      const xOut = toMutableDatumArray(trace.x);
+      const yOut = toMutableDatumArray(trace.y);
+      for (let i = 0; i < nNew; i++) {
+        xOut.push(xNew[i]);
+        yOut.push(yNew[i]);
+      }
+      if (trimCount > 0) {
         xOut.splice(0, trimCount);
         yOut.splice(0, trimCount);
       }
-
       trace.x = xOut;
       trace.y = yOut;
     }
 
     if (!this.initialized) return;
 
-    const scene = this.compileScene();
-    this.renderer.setLayers(scene);
+    const usedFastPath = this.tryAppendFast(prepared);
+    if (!usedFastPath) {
+      const scene = this.compileScene();
+      this.renderer.setLayers(scene);
+    }
 
     const xType = this.resolveAxisType("x");
     const yType = this.resolveAxisType("y");
@@ -431,6 +455,195 @@ export class Chart implements ChartPublicApi {
     this.gridBuilt = false;
     this.scheduleGridRebuild();
     this.render();
+  }
+
+  /**
+   * Attempt an O(N_new) incremental GPU update for appendPoints instead of a full recompile.
+   * Returns true if the fast path was taken, false if a full compileScene+setLayers is needed.
+   *
+   * Conditions for fast path:
+   *  - All updated traces are scatter type with smoothing "none"
+   *  - All have existing GPU layer mappings (compileScene was run at least once)
+   *  - Domain is unchanged after the append (new points within current domain, or domain fixed)
+   */
+  private tryAppendFast(
+    prepared: Array<{
+      update: { traceIndex: number };
+      xNew: Datum[];
+      yNew: Datum[];
+      nNew: number;
+      trimCount: number;
+    }>
+  ): boolean {
+    // Gate 1: all updated traces must be scatter with no line smoothing
+    for (const { update, nNew } of prepared) {
+      if (nNew <= 0) continue;
+      const trace = this.traces[update.traceIndex];
+      if (!trace || trace.type !== "scatter") return false;
+      if ((trace.line?.smoothing ?? "none") !== "none") return false;
+      if (!this.traceToMarkerLayerIdx.has(update.traceIndex)) return false;
+    }
+
+    const xType = this.resolveAxisType("x");
+    const yType = this.resolveAxisType("y");
+
+    // Gate 2: domain must not change (new points within current domain, or domain is overridden)
+    const newXDomain = this.computeAxisDomain(this.traces, "x", this.getAxis("x"), xType);
+    const newYDomain = this.computeAxisDomain(this.traces, "y", this.getAxis("y"), yType);
+    const EPS = 1e-10;
+    if (
+      Math.abs(newXDomain[0] - this.xDomainNum[0]) > EPS ||
+      Math.abs(newXDomain[1] - this.xDomainNum[1]) > EPS ||
+      Math.abs(newYDomain[0] - this.yDomainNum[0]) > EPS ||
+      Math.abs(newYDomain[1] - this.yDomainNum[1]) > EPS
+    ) {
+      return false;
+    }
+
+    // Fast path: perform incremental updates per trace
+    for (const { update, xNew, yNew, nNew, trimCount } of prepared) {
+      if (nNew <= 0) continue;
+      const { traceIndex } = update;
+      const trace = this.traces[traceIndex];
+      const mode = (trace as import("./types.js").ScatterTrace).mode ?? "markers";
+
+      // Normalize only the new points using the current (unchanged) domain
+      const newNorm = this.normalizeInterleaved(xNew, yNew, xType, yType, this.xDomainNum, this.yDomainNum);
+
+      const markerLayerIdx = this.traceToMarkerLayerIdx.get(traceIndex)!;
+
+      // --- Marker layer ---
+      const hasMarkers = mode === "markers" || mode === "lines+markers";
+      if (hasMarkers) {
+        this.renderer.appendToMarkerLayer(markerLayerIdx, newNorm, trimCount);
+        // Mark the CPU norm cache as dirty — will be lazily rebuilt in getNormPoint()
+        this.markerNormByTraceDirty.add(traceIndex);
+      }
+
+      // --- Line layer ---
+      const lineLayerIdxs = this.traceToLineLayerIdxs.get(traceIndex);
+      const hasLines = mode === "lines" || mode === "lines+markers";
+      if (hasLines && lineLayerIdxs && lineLayerIdxs.length > 0) {
+        // Build new segments: junction (last-old → first-new) + segments within new points
+        // After mutation, trace.x[length - nNew - 1] is the last OLD point in the window
+        const lastOldIdx = trace.x.length - nNew - 1;
+        const newSegments = this.buildFastAppendSegments(
+          lastOldIdx >= 0 ? trace.x[lastOldIdx] : null,
+          lastOldIdx >= 0 ? trace.y[lastOldIdx] : null,
+          xNew, yNew, nNew,
+          xType, yType
+        );
+        this.renderer.appendToLineLayer(lineLayerIdxs[0], newSegments, trimCount);
+      }
+
+      // Update traceData (O(1) reference swap — no copy)
+      const td = this.traceData[traceIndex];
+      if (td) {
+        td.xs = trace.x as Datum[];
+        td.ys = trace.y as Datum[];
+      }
+
+      // Update idRanges count for this trace
+      const idRange = this.idRanges.find(r => r.traceIndex === traceIndex);
+      if (idRange) {
+        idRange.count = Math.min(trace.x.length, trace.y.length);
+      }
+    }
+
+    // Recompute all baseIds to prevent id collisions after count changes
+    let runningBaseId = 0;
+    for (let i = 0; i < this.idRanges.length; i++) {
+      this.idRanges[i].baseId = runningBaseId;
+      this.renderer.updateMarkerLayerBaseId(i, runningBaseId);
+      runningBaseId += this.idRanges[i].count;
+    }
+
+    // Rebuild sorted hover indices for affected traces
+    const hovermode = this.getHoverMode();
+    if (hovermode === "x" || hovermode === "y") {
+      const SORT_LIMIT = 300_000;
+      for (const { update, nNew } of prepared) {
+        if (nNew <= 0) continue;
+        const { traceIndex } = update;
+        const td = this.traceData[traceIndex];
+        if (!td || td.xs.length > SORT_LIMIT) continue;
+
+        const n = td.xs.length;
+        const xsNum = new Float64Array(n);
+        const ysNum = new Float64Array(n);
+        for (let i = 0; i < n; i++) {
+          xsNum[i] = toNumber(td.xs[i], xType);
+          ysNum[i] = toNumber(td.ys[i], yType);
+        }
+        const orderX = sortedOrder(xsNum);
+        const orderY = sortedOrder(ysNum);
+
+        const xi = this.xSorted.findIndex(s => s.traceIndex === traceIndex);
+        if (xi >= 0) {
+          this.xSorted[xi] = { traceIndex, order: orderX, xsNum };
+          this.ySorted[xi] = { traceIndex, order: orderY, ysNum };
+        } else {
+          this.xSorted.push({ traceIndex, order: orderX, xsNum });
+          this.ySorted.push({ traceIndex, order: orderY, ysNum });
+        }
+      }
+    }
+
+    return true;
+  }
+
+  /**
+   * Build the line segments for a fast-path append: junction segment (lastOld → firstNew)
+   * plus all consecutive segments within the new points.
+   */
+  private buildFastAppendSegments(
+    lastOldX: Datum | null,
+    lastOldY: Datum | null,
+    xNew: Datum[],
+    yNew: Datum[],
+    nNew: number,
+    xType: AxisType,
+    yType: AxisType
+  ): Float32Array {
+    const [x0, x1] = this.xDomainNum;
+    const [y0, y1] = this.yDomainNum;
+    const lx0 = xType === "log" ? Math.log10(x0) : x0;
+    const lx1 = xType === "log" ? Math.log10(x1) : x1;
+    const ly0 = yType === "log" ? Math.log10(y0) : y0;
+    const ly1 = yType === "log" ? Math.log10(y1) : y1;
+    const invX = 1 / (lx1 - lx0);
+    const invY = 1 / (ly1 - ly0);
+
+    const normPoint = (xv: Datum, yv: Datum): [number, number] => {
+      let xn = toNumber(xv, xType);
+      let yn = toNumber(yv, yType);
+      if (xType === "log") xn = xn > 0 ? Math.log10(xn) : NaN;
+      if (yType === "log") yn = yn > 0 ? Math.log10(yn) : NaN;
+      return [
+        Number.isFinite(xn) ? (xn - lx0) * invX : NaN,
+        Number.isFinite(yn) ? 1 - (yn - ly0) * invY : NaN
+      ];
+    };
+
+    // Collect all points: [lastOld (if any), new[0], new[1], ..., new[nNew-1]]
+    const pts: Array<[number, number]> = [];
+    if (lastOldX !== null && lastOldY !== null) {
+      pts.push(normPoint(lastOldX, lastOldY));
+    }
+    for (let i = 0; i < nNew; i++) {
+      pts.push(normPoint(xNew[i], yNew[i]));
+    }
+
+    // Build segments between consecutive finite points
+    const out: number[] = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const [ax, ay] = pts[i];
+      const [bx, by] = pts[i + 1];
+      if (Number.isFinite(ax) && Number.isFinite(ay) && Number.isFinite(bx) && Number.isFinite(by)) {
+        out.push(ax, ay, bx, by);
+      }
+    }
+    return new Float32Array(out);
   }
 
   /**
@@ -1782,6 +1995,9 @@ export class Chart implements ChartPublicApi {
     this.markerNormByTrace.clear();
     this.markerNormLayers = [];
     this.idRanges = [];
+    this.traceToMarkerLayerIdx.clear();
+    this.traceToLineLayerIdxs.clear();
+    this.markerNormByTraceDirty.clear();
 
     const markers: Parameters<WebGPURenderer["setLayers"]>[0]["markers"] = [];
     const lines: Parameters<WebGPURenderer["setLayers"]>[0]["lines"] = [];
@@ -1985,6 +2201,7 @@ export class Chart implements ChartPublicApi {
         this.idRanges.push({ baseId, count, traceIndex });
         this.markerNormByTrace.set(traceIndex, points01);
         this.markerNormLayers.push({ traceIndex, points01 });
+        this.traceToMarkerLayerIdx.set(traceIndex, markers.length);
 
         markers.push({
           points01,
@@ -1999,6 +2216,10 @@ export class Chart implements ChartPublicApi {
         const linePoints01 = this.smoothLinePoints(points01, smoothingMode);
         const c = parseColor(trace.line?.color ?? baseColor) ?? [0.12, 0.12, 0.12];
         const a = clamp01(trace.line?.opacity ?? 0.55);
+        // Track line layer index for fast-path incremental updates
+        const existing = this.traceToLineLayerIdxs.get(traceIndex) ?? [];
+        existing.push(lines.length);
+        this.traceToLineLayerIdxs.set(traceIndex, existing);
         lines.push({
           points01: linePoints01,
           rgba: [c[0], c[1], c[2], a],
@@ -2630,6 +2851,17 @@ export class Chart implements ChartPublicApi {
   }
 
   private getNormPoint(traceIndex: number, pointIndex: number) {
+    // Rebuild if the CPU cache was invalidated by a fast-path append
+    if (this.markerNormByTraceDirty.has(traceIndex)) {
+      const trace = this.traces[traceIndex];
+      if (trace) {
+        const xType = this.resolveAxisType("x");
+        const yType = this.resolveAxisType("y");
+        const rebuilt = this.normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum);
+        this.markerNormByTrace.set(traceIndex, rebuilt);
+      }
+      this.markerNormByTraceDirty.delete(traceIndex);
+    }
     const pts = this.markerNormByTrace.get(traceIndex);
     if (!pts) return null;
     const i = pointIndex * 2;

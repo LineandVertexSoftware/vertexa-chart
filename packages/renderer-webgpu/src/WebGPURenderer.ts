@@ -40,6 +40,8 @@ export type PerformanceStats = {
 type MarkerLayerGPU = {
   buf: GPUBuffer;
   count: number;
+  capacity: number;   // total allocated points in buf (buf.size / 8)
+  firstPoint: number; // ring-buffer offset: logical point 0 is at physical index firstPoint
   pointSizePx: number;
   rgba: [number, number, number, number];
   baseId: number;
@@ -48,6 +50,8 @@ type MarkerLayerGPU = {
 type LineLayerGPU = {
   buf: GPUBuffer;
   segmentCount: number;
+  capacity: number;    // total allocated segments in buf (buf.size / 16)
+  firstSegment: number; // GPU draw offset: first valid segment in buf
   rgba: [number, number, number, number];
   widthPx: number;
   dashPattern: [number, number, number, number];
@@ -152,19 +156,21 @@ export class WebGPURenderer {
     this.lineBindGroups = [];
 
     // Clean up old pick uniforms/bind groups (bind groups reference marker buffers)
-    for (const buf of this.pickUniformsBufs) buf.destroy();
+    for (const buf of this.pickUniformsBufs) buf?.destroy();
     this.pickUniformsBufs = [];
     this.pickBindGroups = [];
+    this.pickLayerBufs = [];
 
     // Create marker layers with per-layer uniform buffers
     for (const m of scene.markers) {
       const count = m.points01.length / 2;
+      const capacity = Math.max(count * 2, 64);
       const buf = this.device.createBuffer({
-        size: m.points01.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        size: capacity * 8, // 2 floats × 4 bytes per point
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
       });
       this.device.queue.writeBuffer(buf, 0, m.points01.buffer, m.points01.byteOffset, m.points01.byteLength);
-      this.markerLayers.push({ buf, count, pointSizePx: m.pointSizePx, rgba: m.rgba, baseId: m.baseId });
+      this.markerLayers.push({ buf, count, capacity, firstPoint: 0, pointSizePx: m.pointSizePx, rgba: m.rgba, baseId: m.baseId });
 
       // Create dedicated uniform buffer for this layer
       const uniformBuf = this.device.createBuffer({
@@ -189,9 +195,10 @@ export class WebGPURenderer {
       const segmentCount = segments.length / 4;
       if (segmentCount < 1) continue;
 
+      const capacity = Math.max(segmentCount * 2, 64);
       const buf = this.device.createBuffer({
-        size: segments.byteLength,
-        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+        size: capacity * 16, // 4 floats × 4 bytes per segment
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
       });
       this.device.queue.writeBuffer(buf, 0, segments.buffer, segments.byteOffset, segments.byteLength);
 
@@ -199,6 +206,8 @@ export class WebGPURenderer {
       this.lineLayers.push({
         buf,
         segmentCount,
+        capacity,
+        firstSegment: 0,
         rgba: l.rgba,
         widthPx: Math.max(0.5, l.widthPx ?? 1),
         dashPattern,
@@ -359,7 +368,7 @@ export class WebGPURenderer {
       pass.setPipeline(this.linePipeline);
       pass.setVertexBuffer(0, this.lineQuadBuf);
       pass.setVertexBuffer(1, layer.buf);
-      pass.draw(6, layer.segmentCount, 0, 0);
+      pass.draw(6, layer.segmentCount, 0, layer.firstSegment);
     }
 
     let effectiveSampledPoints = 0;
@@ -368,7 +377,7 @@ export class WebGPURenderer {
     for (let i = 0; i < this.markerLayers.length; i++) {
       const layer = this.markerLayers[i];
       if (layer.count < 1) continue;
-      
+
       this.writeUniformsToBuffer(this.markerUniformsBufs[i], {
         canvasSize,
         plotOrigin,
@@ -378,7 +387,8 @@ export class WebGPURenderer {
         rgba: layer.rgba,
         pointCount: layer.count,
         lodStride,
-        lodOffset: this.calculateLODOffset(layer.baseId, lodStride)
+        lodOffset: this.calculateLODOffset(layer.baseId, lodStride),
+        firstPoint: layer.firstPoint
       });
       
       pass.setBindGroup(0, this.markerBindGroups[i]);
@@ -491,7 +501,7 @@ export class WebGPURenderer {
       pass.setPipeline(this.linePipeline);
       pass.setVertexBuffer(0, this.lineQuadBuf);
       pass.setVertexBuffer(1, layer.buf);
-      pass.draw(6, layer.segmentCount, 0, 0);
+      pass.draw(6, layer.segmentCount, 0, layer.firstSegment);
     }
 
     for (let i = 0; i < this.markerLayers.length; i++) {
@@ -508,7 +518,8 @@ export class WebGPURenderer {
         rgba: layer.rgba,
         pointCount: layer.count,
         lodStride,
-        lodOffset
+        lodOffset,
+        firstPoint: layer.firstPoint
       });
 
       pass.setBindGroup(0, this.markerBindGroups[i]);
@@ -625,7 +636,8 @@ export class WebGPURenderer {
         baseId: layer.baseId,
         pointCount: layer.count,
         lodStride,
-        lodOffset
+        lodOffset,
+        firstPoint: layer.firstPoint
       });
 
       pass.setBindGroup(0, bindGroup);
@@ -914,6 +926,7 @@ export class WebGPURenderer {
     pointCount?: number;
     lodStride?: number;
     lodOffset?: number;
+    firstPoint?: number;
   }) {
     // Updated to match new shader layout with proper vec3 alignment
     const u = new Float32Array(20);
@@ -952,7 +965,7 @@ export class WebGPURenderer {
     u32[16] = args.pointCount ?? 0;
     u32[17] = args.lodStride ?? 1;
     u32[18] = args.lodOffset ?? 0;
-    u32[19] = 0;
+    u32[19] = args.firstPoint ?? 0;
 
     this.device.queue.writeBuffer(buffer, 0, u);
   }
@@ -1091,6 +1104,117 @@ export class WebGPURenderer {
     return { dashPattern, dashCount };
   }
 
+  /**
+   * Append new normalized points to an existing marker layer, O(nNew) in the common case.
+   * Handles capacity growth by GPU-side buffer copy + reallocation when needed.
+   */
+  appendToMarkerLayer(layerIdx: number, newPoints01: Float32Array, trimCount: number) {
+    const layer = this.markerLayers[layerIdx];
+    if (!layer) return;
+
+    const nNew = newPoints01.length / 2;
+    const newFirstPoint = layer.firstPoint + trimCount;
+    const newCount = layer.count - trimCount + nNew;
+    const endPos = newFirstPoint + newCount; // = layer.firstPoint + layer.count + nNew
+
+    if (endPos <= layer.capacity) {
+      // Fast path: write new points directly at the end of the live window
+      const writeByteOffset = (layer.firstPoint + layer.count) * 8;
+      this.device.queue.writeBuffer(layer.buf, writeByteOffset, newPoints01.buffer, newPoints01.byteOffset, newPoints01.byteLength);
+      layer.firstPoint = newFirstPoint;
+      layer.count = newCount;
+    } else {
+      // Overflow: reallocate with 2× the new window size
+      const newCapacity = Math.max(newCount * 2, 64);
+      const newBuf = this.device.createBuffer({
+        size: newCapacity * 8,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
+      });
+      // GPU-side copy of the existing live window (firstPoint..firstPoint+count-trimCount)
+      const liveCount = layer.count - trimCount;
+      if (liveCount > 0) {
+        const encoder = this.device.createCommandEncoder();
+        encoder.copyBufferToBuffer(layer.buf, newFirstPoint * 8, newBuf, 0, liveCount * 8);
+        this.device.queue.submit([encoder.finish()]);
+      }
+      // Append new points after the copied window
+      this.device.queue.writeBuffer(newBuf, liveCount * 8, newPoints01.buffer, newPoints01.byteOffset, newPoints01.byteLength);
+
+      // Update bind groups referencing the old buf
+      const newUniformBuf = this.markerUniformsBufs[layerIdx];
+      const newBindGroup = this.device.createBindGroup({
+        layout: this.scatterPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: newUniformBuf } },
+          { binding: 1, resource: { buffer: newBuf } }
+        ]
+      });
+      this.markerBindGroups[layerIdx] = newBindGroup;
+
+      layer.buf.destroy();
+      layer.buf = newBuf;
+      layer.capacity = newCapacity;
+      layer.firstPoint = 0;
+      layer.count = newCount;
+
+      // Invalidate the stale pick bind group (it referenced the old buf)
+      if (this.pickUniformsBufs[layerIdx]) {
+        this.pickUniformsBufs[layerIdx].destroy();
+        this.pickUniformsBufs[layerIdx] = undefined!;
+        this.pickBindGroups[layerIdx] = undefined!;
+        this.pickLayerBufs[layerIdx] = undefined!;
+      }
+    }
+  }
+
+  /**
+   * Append new line segments to an existing line layer, O(nNewSegs) in the common case.
+   * Uses firstInstance-based offset to avoid shifting data on trim.
+   */
+  appendToLineLayer(layerIdx: number, newSegments: Float32Array, trimCount: number) {
+    const layer = this.lineLayers[layerIdx];
+    if (!layer) return;
+
+    const nNew = newSegments.length / 4;
+    const newFirstSegment = layer.firstSegment + trimCount;
+    const newSegmentCount = layer.segmentCount - trimCount + nNew;
+    const endPos = newFirstSegment + newSegmentCount; // = firstSegment + segmentCount + nNew
+
+    if (endPos <= layer.capacity) {
+      // Fast path: append new segments at the tail of the live window
+      const writeByteOffset = (layer.firstSegment + layer.segmentCount) * 16;
+      this.device.queue.writeBuffer(layer.buf, writeByteOffset, newSegments.buffer, newSegments.byteOffset, newSegments.byteLength);
+      layer.firstSegment = newFirstSegment;
+      layer.segmentCount = newSegmentCount;
+    } else {
+      // Overflow: reallocate
+      const newCapacity = Math.max(newSegmentCount * 2, 64);
+      const newBuf = this.device.createBuffer({
+        size: newCapacity * 16,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
+      });
+      const liveSeg = layer.segmentCount - trimCount;
+      if (liveSeg > 0) {
+        const encoder = this.device.createCommandEncoder();
+        encoder.copyBufferToBuffer(layer.buf, newFirstSegment * 16, newBuf, 0, liveSeg * 16);
+        this.device.queue.submit([encoder.finish()]);
+      }
+      this.device.queue.writeBuffer(newBuf, liveSeg * 16, newSegments.buffer, newSegments.byteOffset, newSegments.byteLength);
+
+      layer.buf.destroy();
+      layer.buf = newBuf;
+      layer.capacity = newCapacity;
+      layer.firstSegment = 0;
+      layer.segmentCount = newSegmentCount;
+    }
+  }
+
+  /** Update the baseId for a marker layer (called after count changes to avoid id collisions). */
+  updateMarkerLayerBaseId(layerIdx: number, newBaseId: number) {
+    const layer = this.markerLayers[layerIdx];
+    if (layer) layer.baseId = newBaseId;
+  }
+
   private buildLineSegments(points01: Float32Array): Float32Array {
     const n = Math.floor(points01.length / 2);
     if (n < 2) return new Float32Array(0);
@@ -1143,10 +1267,18 @@ export class WebGPURenderer {
     return bytesPerRow;
   }
 
+  private pickLayerBufs: GPUBuffer[] = []; // tracks which layer buf each pick bind group was built for
+
   private ensurePickBuffer(index: number, layerBuf: GPUBuffer): { buffer: GPUBuffer; bindGroup: GPUBindGroup } {
+    // Invalidate if the layer data buffer was reallocated
+    if (this.pickLayerBufs[index] !== layerBuf && this.pickUniformsBufs[index]) {
+      this.pickUniformsBufs[index].destroy();
+      this.pickUniformsBufs[index] = undefined!;
+      this.pickBindGroups[index] = undefined!;
+    }
     if (!this.pickUniformsBufs[index]) {
       const buffer = this.device.createBuffer({
-        size: 64,
+        size: 80, // extended from 64 to 80 to hold firstPoint + 3 pads
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
       const bindGroup = this.device.createBindGroup({
@@ -1158,10 +1290,11 @@ export class WebGPURenderer {
       });
       this.pickUniformsBufs[index] = buffer;
       this.pickBindGroups[index] = bindGroup;
+      this.pickLayerBufs[index] = layerBuf;
     }
-    return { 
-      buffer: this.pickUniformsBufs[index], 
-      bindGroup: this.pickBindGroups[index] 
+    return {
+      buffer: this.pickUniformsBufs[index],
+      bindGroup: this.pickBindGroups[index]
     };
   }
 
@@ -1175,28 +1308,33 @@ export class WebGPURenderer {
     pointCount: number;
     lodStride: number;
     lodOffset: number;
+    firstPoint: number;
   }) {
-    const f = new Float32Array(16);
-    
-    f[0] = args.canvasSize[0]; 
+    const f = new Float32Array(20); // 80 bytes to match extended PickUniforms struct
+
+    f[0] = args.canvasSize[0];
     f[1] = args.canvasSize[1];
-    f[2] = args.plotOrigin[0]; 
+    f[2] = args.plotOrigin[0];
     f[3] = args.plotOrigin[1];
-    f[4] = args.plotSize[0];   
+    f[4] = args.plotSize[0];
     f[5] = args.plotSize[1];
     f[6] = 0; // padding
     f[7] = 0;
-    f[8] = args.zoom[0]; 
-    f[9] = args.zoom[1]; 
+    f[8] = args.zoom[0];
+    f[9] = args.zoom[1];
     f[10] = args.zoom[2];
     f[11] = args.pointSizePx;
 
-    // u32 fields at offsets 48..60 (float indices 12..15)
+    // u32 fields at offsets 48..76 (float indices 12..19)
     const u32 = new Uint32Array(f.buffer);
     u32[12] = args.baseId >>> 0;
     u32[13] = args.pointCount >>> 0;
     u32[14] = args.lodStride >>> 0;
     u32[15] = args.lodOffset >>> 0;
+    u32[16] = args.firstPoint >>> 0;
+    u32[17] = 0; // _pad1
+    u32[18] = 0; // _pad2
+    u32[19] = 0; // _pad3
 
     this.device.queue.writeBuffer(buffer, 0, f);
   }

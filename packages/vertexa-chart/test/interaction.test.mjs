@@ -117,7 +117,10 @@ function baseChart(Chart) {
     xSorted: [],
     ySorted: [],
     zoom: { k: 1, x: 0, y: 0 },
-    dpr: 1
+    dpr: 1,
+    traceToMarkerLayerIdx: new Map(),
+    traceToLineLayerIdxs: new Map(),
+    markerNormByTraceDirty: new Set()
   });
 }
 

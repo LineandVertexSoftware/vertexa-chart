@@ -9,7 +9,7 @@ struct Uniforms {
   pointCount   : u32,     // offset 64
   lodStride    : u32,     // offset 68
   lodOffset    : u32,     // offset 72
-  _pad1        : u32      // offset 76
+  firstPoint   : u32      // offset 76 - ring-buffer physical start index
 };
 
 @group(0) @binding(0) var<uniform> U : Uniforms;
@@ -32,8 +32,8 @@ fn px_to_clip(p: vec2f) -> vec2f {
 
 @vertex
 fn vs_main(input: VSIn) -> VSOut {
-  let pointIdx = input.inst * U.lodStride + U.lodOffset;
-  let p = P[pointIdx];
+  let logicalIdx = input.inst * U.lodStride + U.lodOffset;
+  let p = P[logicalIdx + U.firstPoint];
   var ptPx = U.plotOrigin + (p * U.plotSize) * U.zoom.x + vec2f(U.zoom.y, U.zoom.z);
   let offsetPx = input.corner * U.pointSizePx;
   let finalPx = ptPx + offsetPx;
