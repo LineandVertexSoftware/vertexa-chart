@@ -344,7 +344,7 @@ chart.appendPoints(
 ## Open Source Release Flow
 
 1. Create/push the GitHub repository:
-   - `git remote add origin git@github.com:art/vertexa-chart.git`
+   - `git remote add origin https://github.com/LineandVertexSoftware/vertexa-chart.git`
    - `git push -u origin main`
 2. Validate release artifacts:
    - `pnpm release:check`
