@@ -19,8 +19,8 @@
     "test:visual": "pnpm -C apps/demo test:visual",
     "preview": "pnpm -C apps/demo preview",
     "publish:packages": "pnpm -r --filter './packages/**' publish",
-    "version:patch": "pnpm -r --filter './packages/**' exec npm version patch",
-    "version:minor": "pnpm -r --filter './packages/**' exec npm version minor",
-    "version:major": "pnpm -r --filter './packages/**' exec npm version major"
+    "version:patch": "pnpm -r --filter './packages/**' exec pnpm version patch",
+    "version:minor": "pnpm -r --filter './packages/**' exec pnpm version minor",
+    "version:major": "pnpm -r --filter './packages/**' exec pnpm version major"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@lineandvertexsoftware/vertexa-chart",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "High-performance charting library using WebGPU and D3.js",
   "type": "module",
   "main": "./dist/index.js",
