@@ -19,4 +19,5 @@ This package is primarily intended as an internal building block of
 overlay workflows.
 
 For full docs and examples, see:
-[https://github.com/LineandVertexSoftware/vertexa-chart#readme](https://github.com/LineandVertexSoftware/vertexa-chart#readme)
+[https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md]([https://github.com/LineandVertexSoftware/vertexa-chart#readme)
+](https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md)
