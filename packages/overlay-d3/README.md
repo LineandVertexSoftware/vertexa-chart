@@ -20,4 +20,3 @@ overlay workflows.
 
 For full docs and examples, see:
 [https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md]([https://github.com/LineandVertexSoftware/vertexa-chart#readme)
-](https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md)
