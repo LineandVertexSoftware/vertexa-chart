@@ -122,12 +122,12 @@ function baseChart(Chart) {
 }
 
 test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => {
-  t.mock.module("@vertexa-chart/renderer-webgpu", {
+  t.mock.module("@lineandvertexsoftware/renderer-webgpu", {
     namedExports: {
       WebGPURenderer: class WebGPURendererStub {}
     }
   });
-  t.mock.module("@vertexa-chart/overlay-d3", {
+  t.mock.module("@lineandvertexsoftware/overlay-d3", {
     namedExports: {
       OverlayD3: class OverlayD3Stub {}
     }

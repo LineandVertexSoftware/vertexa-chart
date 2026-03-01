@@ -1,6 +1,6 @@
 {
-  "name": "vertexa-chart-monorepo",
-  "private": true,
+  "name": "@lineandvertexsoftware/vertexa-chart",
+  "private": false,
   "packageManager": "pnpm@9.12.0",
   "workspaces": [
     "packages/*",

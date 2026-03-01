@@ -1,6 +1,6 @@
 {
-  "name": "@vertexa-chart/renderer-webgpu",
-  "version": "0.1.0",
+  "name": "@lineandvertexsoftware/renderer-webgpu",
+  "version": "0.1.1",
   "description": "WebGPU rendering engine for high-performance visualization",
   "type": "module",
   "main": "./dist/index.js",

@@ -10,9 +10,9 @@ importers:
 
   apps/demo:
     dependencies:
-      '@vertexa-chart/vertexa-chart-core':
+      '@lineandvertexsoftware/vertexa-chart':
         specifier: workspace:*
-        version: link:../../packages/vertexa-chart-core
+        version: link:../../packages/vertexa-chart
     devDependencies:
       typescript:
         specifier: ^5.6.3
@@ -43,12 +43,12 @@ importers:
         specifier: ^5.6.3
         version: 5.9.3
 
-  packages/vertexa-chart-core:
+  packages/vertexa-chart:
     dependencies:
-      '@vertexa-chart/overlay-d3':
+      '@lineandvertexsoftware/overlay-d3':
         specifier: workspace:*
         version: link:../overlay-d3
-      '@vertexa-chart/renderer-webgpu':
+      '@lineandvertexsoftware/renderer-webgpu':
         specifier: workspace:*
         version: link:../renderer-webgpu
     devDependencies:

@@ -1,6 +1,6 @@
 {
-  "name": "@vertexa-chart/overlay-d3",
-  "version": "0.1.0",
+  "name": "@lineandvertexsoftware/overlay-d3",
+  "version": "0.1.1",
   "description": "D3.js overlay for interactive axes, zoom, and legends",
   "type": "module",
   "main": "./dist/index.js",

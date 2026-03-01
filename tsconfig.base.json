@@ -10,9 +10,9 @@
     "types": [],
     "baseUrl": ".",
 	"paths": {
-		"@vertexa-chart/overlay-d3": ["./packages/overlay-d3/src/index.ts"],
-		"@vertexa-chart/renderer-webgpu": ["./packages/renderer-webgpu/src/index.ts"],
-		"@vertexa-chart/vertexa-chart-core": ["./packages/vertexa-chart-core/src/index.ts"]
+		"@lineandvertexsoftware/overlay-d3": ["./packages/overlay-d3/src/index.ts"],
+		"@lineandvertexsoftware/renderer-webgpu": ["./packages/renderer-webgpu/src/index.ts"],
+		"@lineandvertexsoftware/vertexa-chart": ["./packages/vertexa-chart/src/index.ts"]
 	}
   }
 }

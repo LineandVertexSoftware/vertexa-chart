@@ -9,7 +9,7 @@
     "test:visual": "node test/visual-regression.mjs"
   },
   "dependencies": {
-    "@vertexa-chart/vertexa-chart-core": "workspace:*"
+    "@lineandvertexsoftware/vertexa-chart": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3",

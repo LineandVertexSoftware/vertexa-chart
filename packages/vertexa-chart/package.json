@@ -1,6 +1,6 @@
 {
-  "name": "@vertexa-chart/vertexa-chart-core",
-  "version": "0.1.0",
+  "name": "@lineandvertexsoftware/vertexa-chart",
+  "version": "0.1.1",
   "description": "High-performance charting library using WebGPU and D3.js",
   "type": "module",
   "main": "./dist/index.js",
@@ -25,8 +25,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@vertexa-chart/overlay-d3": "workspace:*",
-    "@vertexa-chart/renderer-webgpu": "workspace:*"
+    "@lineandvertexsoftware/overlay-d3": "workspace:*",
+    "@lineandvertexsoftware/renderer-webgpu": "workspace:*"
   },
   "devDependencies": {
     "typescript": "^5.6.3"
@@ -49,7 +49,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/LineandVertexSoftware/vertexa-chart.git",
-    "directory": "packages/vertexa-chart-core"
+    "directory": "packages/vertexa-chart"
   },
   "homepage": "https://github.com/LineandVertexSoftware/vertexa-chart#readme",
   "bugs": {

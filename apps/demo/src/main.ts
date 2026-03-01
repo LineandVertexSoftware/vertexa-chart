@@ -5,7 +5,7 @@ import {
   type ChartPerformanceMode,
   type HoverMode,
   type Trace
-} from "@vertexa-chart/vertexa-chart-core";
+} from "@lineandvertexsoftware/vertexa-chart";
 
 const root = document.querySelector<HTMLDivElement>("#root");
 if (!root) throw new Error("Missing #root container.");

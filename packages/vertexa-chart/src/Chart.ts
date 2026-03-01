@@ -6,8 +6,8 @@ import {
   type HoverEvent,
   type LegendItem,
   type PlotSelectEvent
-} from "@vertexa-chart/overlay-d3";
-import { WebGPURenderer } from "@vertexa-chart/renderer-webgpu";
+} from "@lineandvertexsoftware/overlay-d3";
+import { WebGPURenderer } from "@lineandvertexsoftware/renderer-webgpu";
 import type {
   Axis,
   AxisType,

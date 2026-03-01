@@ -1,17 +1,17 @@
-# @vertexa-chart/vertexa-chart-core
+# @lineandvertexsoftware/vertexa-chart
 
 Core chart API for Vertexa Chart.
 
 ## Install
 
 ```bash
-npm install @vertexa-chart/vertexa-chart-core
+npm install @lineandvertexsoftware/vertexa-chart
 ```
 
 ## Usage
 
 ```ts
-import { Chart } from "@vertexa-chart/vertexa-chart-core";
+import { Chart } from "@lineandvertexsoftware/vertexa-chart";
 
 const chart = new Chart(document.querySelector("#root")!, {
   width: 920,

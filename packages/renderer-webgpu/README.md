@@ -1,21 +1,21 @@
-# @vertexa-chart/renderer-webgpu
+# @lineandvertexsoftware/renderer-webgpu
 
 WebGPU rendering engine used by Vertexa Chart.
 
 ## Install
 
 ```bash
-npm install @vertexa-chart/renderer-webgpu
+npm install @lineandvertexsoftware/renderer-webgpu
 ```
 
 ## Usage
 
 ```ts
-import { WebGPURenderer } from "@vertexa-chart/renderer-webgpu";
+import { WebGPURenderer } from "@lineandvertexsoftware/renderer-webgpu";
 ```
 
 This package is primarily intended as an internal rendering module for
-`@vertexa-chart/vertexa-chart-core`.
+`@lineandvertexsoftware/vertexa-chart`.
 
 For full docs and examples, see:
 [https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md](https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md)

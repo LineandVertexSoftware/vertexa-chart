@@ -2,8 +2,8 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "paths": {
-      "@vertexa-chart/overlay-d3": ["./packages/overlay-d3/dist/index.d.ts"],
-      "@vertexa-chart/renderer-webgpu": ["./packages/renderer-webgpu/dist/index.d.ts"]
+      "@lineandvertexsoftware/overlay-d3": ["./packages/overlay-d3/dist/index.d.ts"],
+      "@lineandvertexsoftware/renderer-webgpu": ["./packages/renderer-webgpu/dist/index.d.ts"]
     },
     "outDir": "./dist",
     "rootDir": "./src",

@@ -21,7 +21,7 @@ Then open the local URL from Vite.
 
 Import:
 ```ts
-import { Chart } from "@vertexa-chart/vertexa-chart-core";
+import { Chart } from "@lineandvertexsoftware/vertexa-chart";
 ```
 
 Create a chart:
@@ -183,7 +183,7 @@ High-contrast mode can be toggled with `&contrast=1` (for example: `/?example=ev
 
 ### Example 1: Getting Started
 ```ts
-import { Chart } from "@vertexa-chart/vertexa-chart-core";
+import { Chart } from "@lineandvertexsoftware/vertexa-chart";
 
 const chart = new Chart(document.querySelector("#root")!, {
   width: 920,
@@ -336,9 +336,9 @@ chart.appendPoints(
 
 ## Monorepo Packages
 
-- `@vertexa-chart/vertexa-chart-core`: public chart API package
-- `@vertexa-chart/overlay-d3`: D3 overlay module
-- `@vertexa-chart/renderer-webgpu`: WebGPU renderer module
+- `@lineandvertexsoftware/vertexa-chart`: public chart API package
+- `@lineandvertexsoftware/overlay-d3`: D3 overlay module
+- `@lineandvertexsoftware/renderer-webgpu`: WebGPU renderer module
 - `apps/demo`: local demo app and visual regression harness
 
 ## Open Source Release Flow
