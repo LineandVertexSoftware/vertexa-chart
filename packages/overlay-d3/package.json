@@ -46,12 +46,12 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/art/vertexa-chart.git",
+    "url": "git+https://github.com/LineandVertexSoftware/vertexa-chart.git",
     "directory": "packages/overlay-d3"
   },
-  "homepage": "https://github.com/art/vertexa-chart#readme",
+  "homepage": "https://github.com/LineandVertexSoftware/vertexa-chart#readme",
   "bugs": {
-    "url": "https://github.com/art/vertexa-chart/issues"
+    "url": "https://github.com/LineandVertexSoftware/vertexa-chart/issues"
   },
   "publishConfig": {
     "access": "public"
