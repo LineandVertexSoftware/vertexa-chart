@@ -40,4 +40,4 @@ const chart = new Chart(document.querySelector("#root")!, {
 - `destroy()`
 
 For full examples and docs, see the monorepo README:
-[https://github.com/art/vertexa-chart#readme](https://github.com/art/vertexa-chart#readme)
+[https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md](https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/README.md)
