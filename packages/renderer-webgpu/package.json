@@ -1,6 +1,6 @@
 {
   "name": "@lineandvertexsoftware/renderer-webgpu",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "WebGPU rendering engine for high-performance visualization",
   "type": "module",
   "main": "./dist/index.js",

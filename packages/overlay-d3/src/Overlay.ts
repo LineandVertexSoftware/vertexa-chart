@@ -178,6 +178,7 @@ export class OverlayD3 {
   private currentT = d3.zoomIdentity;
   private zoomBehavior: d3.ZoomBehavior<SVGRectElement, unknown> | null = null;
   private annotations: AnnotationPrimitive[] = [];
+  private _annotationsVersion = 0;
   private selecting = false;
   private selectionMode: "box" | "lasso" = "box";
   private selectionStart: { xPlot: number; yPlot: number } | null = null;
@@ -297,6 +298,7 @@ export class OverlayD3 {
 
   setAnnotations(annotations: AnnotationPrimitive[]) {
     this.annotations = annotations.slice();
+    this._annotationsVersion++;
     this.renderAxes({ k: this.currentT.k, x: this.currentT.x, y: this.currentT.y });
   }
 
@@ -818,82 +820,90 @@ export class OverlayD3 {
   }
 
   private renderAnnotations(zx: any, zy: any) {
-    this.gAnnotations.selectAll("*").remove();
-    if (!this.annotations.length) return;
+    const version = this._annotationsVersion;
 
-    for (const anno of this.annotations) {
-      if (anno.type === "line") {
-        const [dashArray, dashCount] = overlayDashToStrokeArray(anno.dash);
-        this.gAnnotations.append("line")
-          .attr("x1", Number(zx(anno.x0)))
-          .attr("y1", Number(zy(anno.y0)))
-          .attr("x2", Number(zx(anno.x1)))
-          .attr("y2", Number(zy(anno.y1)))
-          .attr("stroke", anno.color ?? "#2563eb")
-          .attr("stroke-opacity", clamp(anno.opacity, 0, 1, 0.9))
-          .attr("stroke-width", Math.max(0.5, anno.widthPx ?? 1.5))
-          .attr("stroke-dasharray", dashCount > 0 ? dashArray : null)
-          .attr("shape-rendering", "geometricPrecision");
-        continue;
-      }
-
-      if (anno.type === "region") {
-        const rx0 = Number(zx(anno.x0));
-        const rx1 = Number(zx(anno.x1));
-        const ry0 = Number(zy(anno.y0));
-        const ry1 = Number(zy(anno.y1));
-        const x = Math.min(rx0, rx1);
-        const y = Math.min(ry0, ry1);
-        const w = Math.abs(rx1 - rx0);
-        const h = Math.abs(ry1 - ry0);
-        this.gAnnotations.append("rect")
-          .attr("x", x)
-          .attr("y", y)
-          .attr("width", w)
-          .attr("height", h)
-          .attr("fill", anno.fill ?? "#2563eb")
-          .attr("fill-opacity", clamp(anno.fillOpacity, 0, 1, 0.14))
-          .attr("stroke", anno.stroke ?? "#2563eb")
-          .attr("stroke-opacity", clamp(anno.strokeOpacity, 0, 1, 0.35))
-          .attr("stroke-width", Math.max(0, anno.strokeWidthPx ?? 1));
-        continue;
-      }
-
-      const gx = Number(zx(anno.x)) + (anno.offsetXPx ?? 0);
-      const gy = Number(zy(anno.y)) + (anno.offsetYPx ?? 0);
-      const g = this.gAnnotations.append("g")
-        .attr("transform", `translate(${gx},${gy})`);
-      const text = g.append("text")
-        .text(anno.text)
-        .attr("x", 0)
-        .attr("y", 0)
-        .attr("text-anchor", anno.anchor ?? "start")
-        .attr("dominant-baseline", "central")
-        .attr("fill", anno.color ?? "#111827")
-        .attr("font-family", normalizeFontFamily(anno.fontFamily))
-        .attr("font-size", `${clamp(anno.fontSizePx, 1, 96, 12)}px`);
-
-      if (anno.background) {
-        const node = text.node();
-        if (node) {
-          try {
-            const bb = node.getBBox();
-            const px = Math.max(0, anno.paddingX ?? 4);
-            const py = Math.max(0, anno.paddingY ?? 2);
-            g.insert("rect", "text")
-              .attr("x", bb.x - px)
-              .attr("y", bb.y - py)
-              .attr("width", bb.width + px * 2)
-              .attr("height", bb.height + py * 2)
-              .attr("rx", 3)
-              .attr("fill", anno.background)
-              .attr("fill-opacity", clamp(anno.backgroundOpacity, 0, 1, 0.85));
-          } catch {
-            // Ignore text bbox failures in non-layout contexts.
-          }
+    this.gAnnotations
+      .selectAll<SVGGElement, AnnotationPrimitive>("g.anno")
+      .data(this.annotations, (_d, i) => `${version}-${i}`)
+      .join(
+        (enter) => {
+          const g = enter.append("g").attr("class", "anno");
+          g.each(function (d) {
+            const sel = d3.select(this as SVGGElement);
+            if (d.type === "line") {
+              const [dashArray, dashCount] = overlayDashToStrokeArray(d.dash);
+              sel.append("line")
+                .attr("stroke", d.color ?? "#2563eb")
+                .attr("stroke-opacity", clamp(d.opacity, 0, 1, 0.9))
+                .attr("stroke-width", Math.max(0.5, d.widthPx ?? 1.5))
+                .attr("stroke-dasharray", dashCount > 0 ? dashArray : null)
+                .attr("shape-rendering", "geometricPrecision");
+            } else if (d.type === "region") {
+              sel.append("rect")
+                .attr("fill", d.fill ?? "#2563eb")
+                .attr("fill-opacity", clamp(d.fillOpacity, 0, 1, 0.14))
+                .attr("stroke", d.stroke ?? "#2563eb")
+                .attr("stroke-opacity", clamp(d.strokeOpacity, 0, 1, 0.35))
+                .attr("stroke-width", Math.max(0, d.strokeWidthPx ?? 1));
+            } else {
+              const text = sel.append("text")
+                .text(d.text)
+                .attr("x", 0)
+                .attr("y", 0)
+                .attr("text-anchor", d.anchor ?? "start")
+                .attr("dominant-baseline", "central")
+                .attr("fill", d.color ?? "#111827")
+                .attr("font-family", normalizeFontFamily(d.fontFamily))
+                .attr("font-size", `${clamp(d.fontSizePx, 1, 96, 12)}px`);
+              if (d.background) {
+                const node = text.node();
+                if (node) {
+                  try {
+                    const bb = node.getBBox();
+                    const px = Math.max(0, d.paddingX ?? 4);
+                    const py = Math.max(0, d.paddingY ?? 2);
+                    sel.insert("rect", "text")
+                      .attr("x", bb.x - px)
+                      .attr("y", bb.y - py)
+                      .attr("width", bb.width + px * 2)
+                      .attr("height", bb.height + py * 2)
+                      .attr("rx", 3)
+                      .attr("fill", d.background)
+                      .attr("fill-opacity", clamp(d.backgroundOpacity, 0, 1, 0.85));
+                  } catch {
+                    // Ignore text bbox failures in non-layout contexts.
+                  }
+                }
+              }
+            }
+          });
+          return g;
+        },
+        (update) => update,
+        (exit) => exit.remove(),
+      )
+      .each(function (d) {
+        const sel = d3.select(this as SVGGElement);
+        if (d.type === "line") {
+          sel.select<SVGLineElement>("line")
+            .attr("x1", Number(zx(d.x0)))
+            .attr("y1", Number(zy(d.y0)))
+            .attr("x2", Number(zx(d.x1)))
+            .attr("y2", Number(zy(d.y1)));
+        } else if (d.type === "region") {
+          const rx0 = Number(zx(d.x0));
+          const rx1 = Number(zx(d.x1));
+          const ry0 = Number(zy(d.y0));
+          const ry1 = Number(zy(d.y1));
+          sel.select<SVGRectElement>("rect")
+            .attr("x", Math.min(rx0, rx1))
+            .attr("y", Math.min(ry0, ry1))
+            .attr("width", Math.abs(rx1 - rx0))
+            .attr("height", Math.abs(ry1 - ry0));
+        } else {
+          sel.attr("transform", `translate(${Number(zx(d.x)) + (d.offsetXPx ?? 0)},${Number(zy(d.y)) + (d.offsetYPx ?? 0)})`);
         }
-      }
-    }
+      });
   }
 }
 
