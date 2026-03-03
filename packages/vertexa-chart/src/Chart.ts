@@ -1586,18 +1586,10 @@ export class Chart implements ChartPublicApi {
   }
 
   private normalizeHoverToCss(x: number, y: number) {
-  // If x/y are already CSS px, they should be within [0..width/height].
-  // If they are device px on a DPR=2 display, they'll be within [0..width*dpr].
-  const looksLikeDevicePx =
-    (x > this.width + 1 || y > this.height + 1) &&
-    (x <= this.width * this.dpr + 2) &&
-    (y <= this.height * this.dpr + 2);
-
-  if (looksLikeDevicePx) {
-    return { xCss: x / this.dpr, yCss: y / this.dpr };
+    // HoverEvent.xSvg/ySvg are always CSS pixels (SVG coordinate space).
+    // No DPR conversion needed; the overlay contract guarantees this.
+    return { xCss: x, yCss: y };
   }
-  return { xCss: x, yCss: y };
-}
 
   private normalizePickCss(x: number, y: number) {
     const { xCss, yCss } = this.normalizeHoverToCss(x, y);
