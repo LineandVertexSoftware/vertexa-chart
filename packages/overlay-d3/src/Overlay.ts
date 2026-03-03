@@ -118,6 +118,16 @@ export type GridStyle = {
   strokeWidth?: number;
 };
 
+/**
+ * Union of the three D3 continuous scale types used in this module.
+ * Typed explicitly so wrong method chains (e.g. calling .invert() on a
+ * band scale) are caught at compile time rather than silently at runtime.
+ */
+type D3Scale =
+  | d3.ScaleLinear<number, number>
+  | d3.ScaleLogarithmic<number, number>
+  | d3.ScaleTime<number, number, never>;
+
 const DEFAULT_GRID_STYLE: Required<GridStyle> = {
   show: true,
   color: "#e5e7eb",
@@ -171,8 +181,8 @@ export class OverlayD3 {
   private plotW = 1;
   private plotH = 1;
 
-  private baseX!: any;
-  private baseY!: any;
+  private baseX!: D3Scale;
+  private baseY!: D3Scale;
   private gridStyle: Required<GridStyle>;
 
   private currentT = d3.zoomIdentity;
@@ -199,7 +209,8 @@ export class OverlayD3 {
     }
 
     this.svgSel.attr("data-oid", this._oid);
-    this._axisStyleEl = this.svgSel.append("style") as any;
+    // d3 infers HTMLStyleElement for "style" even on an SVG parent; cast via unknown.
+    this._axisStyleEl = this.svgSel.append("style") as unknown as d3.Selection<SVGStyleElement, unknown, null, undefined>;
 
     this.gRoot = this.svgSel.append("g").attr("class", "overlay-root");
     this.gXAxis = this.gRoot.append("g").attr("class", "x-axis");
@@ -426,7 +437,7 @@ export class OverlayD3 {
       if (!cb) return;
       if (this.selecting) return;
 
-      const [sx, sy] = d3.pointer(event as any, this.svgSel.node() as any);
+      const [sx, sy] = d3.pointer(event, this.svgSel.node());
       const xPlot = sx - this.padding.l;
       const yPlot = sy - this.padding.t;
       const inside = xPlot >= 0 && yPlot >= 0 && xPlot <= this.plotW && yPlot <= this.plotH;
@@ -449,16 +460,16 @@ export class OverlayD3 {
 
     const zoomBehavior = d3.zoom<SVGRectElement, unknown>()
       .scaleExtent([0.5, 50])
-      .filter((event: any) => {
+      .filter((event: MouseEvent | WheelEvent | PointerEvent) => {
         if (this.selecting) return false;
-        if (event?.shiftKey) return false;
-        if (typeof event?.button === "number" && event.button !== 0) return false;
+        if (event.shiftKey) return false;
+        if (typeof event.button === "number" && event.button !== 0) return false;
         return true;
       })
       .on("zoom", zoomed);
 
     this.zoomBehavior = zoomBehavior;
-    this.zoomRect.call(zoomBehavior as any);
+    this.zoomRect.call(zoomBehavior);
 
     // Hover events
 	this.zoomRect.on("mousemove", (event) => {
@@ -485,7 +496,7 @@ export class OverlayD3 {
       event.preventDefault();
       event.stopPropagation();
 
-      const [sx, sy] = d3.pointer(event as any, this.svgSel.node() as any);
+      const [sx, sy] = d3.pointer(event, this.svgSel.node());
       const xPlot = clampPlot(sx - this.padding.l, this.plotW);
       const yPlot = clampPlot(sy - this.padding.t, this.plotH);
 
@@ -510,7 +521,7 @@ export class OverlayD3 {
       const onMove = (moveEvent: MouseEvent) => {
         if (!this.selecting || !this.selectionStart) return;
 
-        const [mx, my] = d3.pointer(moveEvent as any, this.svgSel.node() as any);
+        const [mx, my] = d3.pointer(moveEvent, this.svgSel.node());
         const cx = clampPlot(mx - this.padding.l, this.plotW);
         const cy = clampPlot(my - this.padding.t, this.plotH);
 
@@ -543,7 +554,7 @@ export class OverlayD3 {
         this.selecting = false;
         this.selectionStart = null;
 
-        const [ux, uy] = d3.pointer(upEvent as any, this.svgSel.node() as any);
+        const [ux, uy] = d3.pointer(upEvent, this.svgSel.node());
         const endX = clampPlot(ux - this.padding.l, this.plotW);
         const endY = clampPlot(uy - this.padding.t, this.plotH);
 
@@ -638,7 +649,7 @@ export class OverlayD3 {
 
     const k = Math.max(1e-6, this.currentT.k);
     const next = this.currentT.translate(dxCss / k, dyCss / k);
-    this.zoomRect.call(this.zoomBehavior.transform as any, next);
+    this.zoomBehavior.transform(this.zoomRect, next);
   }
 
   zoomBy(factor: number, centerPlot?: { x: number; y: number }) {
@@ -655,12 +666,12 @@ export class OverlayD3 {
     const nextX = cx - (cx - this.currentT.x) * s;
     const nextY = cy - (cy - this.currentT.y) * s;
     const next = d3.zoomIdentity.translate(nextX, nextY).scale(nextK);
-    this.zoomRect.call(this.zoomBehavior.transform as any, next);
+    this.zoomBehavior.transform(this.zoomRect, next);
   }
 
   resetZoom() {
     if (!this.zoomBehavior) return;
-    this.zoomRect.call(this.zoomBehavior.transform as any, d3.zoomIdentity);
+    this.zoomBehavior.transform(this.zoomRect, d3.zoomIdentity);
   }
 
   destroy() {
@@ -727,29 +738,35 @@ export class OverlayD3 {
     const xTickSize = drawGridInAxisLayer ? -plotH : 6;
     const yTickSize = drawGridInAxisLayer ? -plotW : 6;
 
-    const xAxis = d3.axisBottom(zx)
+    // Cast to AxisScale<number | Date> so D3 can construct a typed Axis.
+    // The union D3Scale covers linear/log/time and all three satisfy this interface.
+    type AnyAxisScale = d3.AxisScale<number | Date>;
+    const xAxis = d3.axisBottom(zx as AnyAxisScale)
       .ticks(xTickCount)
       .tickSize(xTickSize)
       .tickSizeOuter(0);
-    const yAxis = d3.axisLeft(zy)
+    const yAxis = d3.axisLeft(zy as AnyAxisScale)
       .ticks(yTickCount)
       .tickSize(yTickSize)
       .tickSizeOuter(0);
 
     if (this.opts.xAxis.tickValues && this.opts.xAxis.tickValues.length > 0) {
-      xAxis.tickValues(this.opts.xAxis.tickValues as any);
+      xAxis.tickValues(this.opts.xAxis.tickValues);
     }
     if (this.opts.yAxis.tickValues && this.opts.yAxis.tickValues.length > 0) {
-      yAxis.tickValues(this.opts.yAxis.tickValues as any);
+      yAxis.tickValues(this.opts.yAxis.tickValues);
     }
 
     const xTickFormatter = makeTickFormatter(this.opts.xAxis);
     const yTickFormatter = makeTickFormatter(this.opts.yAxis);
-    if (xTickFormatter) xAxis.tickFormat(xTickFormatter as any);
-    if (yTickFormatter) yAxis.tickFormat(yTickFormatter as any);
+    if (xTickFormatter) xAxis.tickFormat(xTickFormatter);
+    if (yTickFormatter) yAxis.tickFormat(yTickFormatter);
 
-    this.gXAxis.call(xAxis as any);
-    this.gYAxis.call(yAxis as any);
+    // Axis<number|Date> is callable on SVGGElement selections; bridge via unknown
+    // because D3's Selection.call generic doesn't unify PElement=null with any.
+    type AxisFn = (sel: typeof this.gXAxis) => void;
+    this.gXAxis.call(xAxis as unknown as AxisFn);
+    this.gYAxis.call(yAxis as unknown as AxisFn);
   }
 
   private applyAxisStyles() {
@@ -770,7 +787,7 @@ export class OverlayD3 {
     );
   }
 
-  private renderGridLines(zx: any, zy: any, xTickCount: number, yTickCount: number) {
+  private renderGridLines(zx: D3Scale, zy: D3Scale, xTickCount: number, yTickCount: number) {
     if (!this.gGridRoot) return;
 
     if (!this.gridStyle.show) {
@@ -814,7 +831,7 @@ export class OverlayD3 {
       .attr("shape-rendering", "crispEdges");
   }
 
-  private renderAnnotations(zx: any, zy: any) {
+  private renderAnnotations(zx: D3Scale, zy: D3Scale) {
     const version = this._annotationsVersion;
 
     this.gAnnotations
@@ -902,7 +919,7 @@ export class OverlayD3 {
   }
 }
 
-function makeScale(type: AxisType, domain: [number, number], range: [number, number]): any {
+function makeScale(type: AxisType, domain: [number, number], range: [number, number]): D3Scale {
   if (type === "log") {
     return d3.scaleLog().domain(domain).range(range).clamp(true);
   }
@@ -912,7 +929,7 @@ function makeScale(type: AxisType, domain: [number, number], range: [number, num
   return d3.scaleLinear().domain(domain).range(range);
 }
 
-function invertValue(type: AxisType, scale: any, v: number): number | Date {
+function invertValue(type: AxisType, scale: D3Scale, v: number): number | Date {
   const inv = scale.invert(v);
   if (type === "time") return inv as Date;
   return Number(inv);
@@ -965,7 +982,7 @@ function clamp(value: number | undefined, min: number, max: number, fallback: nu
   return value;
 }
 
-function getTickValues(scale: any, count: number): Array<number | Date> {
+function getTickValues(scale: D3Scale, count: number): Array<number | Date> {
   if (typeof scale?.ticks === "function") {
     return scale.ticks(count) as Array<number | Date>;
   }
