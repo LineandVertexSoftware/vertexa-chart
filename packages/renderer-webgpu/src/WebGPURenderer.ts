@@ -68,10 +68,7 @@ export class WebGPURenderer {
   private linePipeline!: GPURenderPipeline;
   private hoverPipeline!: GPURenderPipeline;
 
-  private uniformsBuf!: GPUBuffer;
   private hoverUniformsBuf!: GPUBuffer;
-  private bindGroup!: GPUBindGroup;
-  private lineBindGroup!: GPUBindGroup;
   private hoverBindGroup!: GPUBindGroup;
 
   private quadBuf!: GPUBuffer;
@@ -263,7 +260,6 @@ export class WebGPURenderer {
     for (const buf of this.lineUniformsBufs) buf.destroy();
     for (const buf of this.pickUniformsBufs) buf.destroy();
 
-    (this.uniformsBuf as GPUBuffer | undefined)?.destroy?.();
     (this.hoverUniformsBuf as GPUBuffer | undefined)?.destroy?.();
     (this.quadBuf as GPUBuffer | undefined)?.destroy?.();
     (this.lineQuadBuf as GPUBuffer | undefined)?.destroy?.();
@@ -887,22 +883,6 @@ export class WebGPURenderer {
   }
 
   private createUniforms() {
-    // Main uniform buffer - kept for backwards compatibility but not used in render loop
-    this.uniformsBuf = this.device.createBuffer({
-      size: 96,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
-    this.bindGroup = this.device.createBindGroup({
-      layout: this.scatterPipeline.getBindGroupLayout(0),
-      entries: [{ binding: 0, resource: { buffer: this.uniformsBuf } }]
-    });
-
-    this.lineBindGroup = this.device.createBindGroup({
-      layout: this.linePipeline.getBindGroupLayout(0),
-      entries: [{ binding: 0, resource: { buffer: this.uniformsBuf } }]
-    });
-
     // Hover uniform buffer - 80 bytes for inner + outline colors
     this.hoverUniformsBuf = this.device.createBuffer({
       size: 80,
@@ -1011,18 +991,6 @@ export class WebGPURenderer {
     u[23] = 0;
 
     this.device.queue.writeBuffer(buffer, 0, u);
-  }
-
-  // Legacy method - writes to shared buffer (kept for compatibility)
-  private writeUniforms(args: {
-    canvasSize: readonly [number, number];
-    plotOrigin: readonly [number, number];
-    plotSize: readonly [number, number];
-    zoom: readonly [number, number, number];
-    pointSizePx: number;
-    rgba: readonly [number, number, number, number];
-  }) {
-    this.writeUniformsToBuffer(this.uniformsBuf, args);
   }
 
   private writeHoverUniforms(args: {
