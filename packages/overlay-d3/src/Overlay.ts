@@ -186,6 +186,8 @@ export class OverlayD3 {
   private suppressClickUntil = 0;
   private _dragMoveHandler: ((e: MouseEvent) => void) | null = null;
   private _dragUpHandler: ((e: MouseEvent) => void) | null = null;
+  private readonly _oid = `ov${Math.random().toString(36).slice(2, 9)}`;
+  private _axisStyleEl!: d3.Selection<SVGStyleElement, unknown, null, undefined>;
 
   constructor(private opts: OverlayOptions) {
     this.svgSel = d3.select(opts.svg);
@@ -195,6 +197,9 @@ export class OverlayD3 {
       this.gridSvgSel.style("overflow", "hidden").style("pointer-events", "none");
       this.gGridRoot = this.gridSvgSel.append("g").attr("class", "grid-root");
     }
+
+    this.svgSel.attr("data-oid", this._oid);
+    this._axisStyleEl = this.svgSel.append("style") as any;
 
     this.gRoot = this.svgSel.append("g").attr("class", "overlay-root");
     this.gXAxis = this.gRoot.append("g").attr("class", "x-axis");
@@ -249,6 +254,7 @@ export class OverlayD3 {
 
     this.gridStyle = resolveGridStyle(opts.grid);
     this.annotations = opts.annotations ?? [];
+    this.applyAxisStyles();
     this.setSize(opts.width, opts.height, opts.padding);
     this.installZoom(opts.onZoom);
     this.renderAxes({ k: 1, x: 0, y: 0 });
@@ -288,11 +294,13 @@ export class OverlayD3 {
   setAxes(xAxis: AxisSpec, yAxis: AxisSpec) {
     this.opts.xAxis = xAxis;
     this.opts.yAxis = yAxis;
+    this.applyAxisStyles();
     this.setSize(this.width, this.height, this.padding);
   }
 
   setGrid(grid?: GridStyle) {
     this.gridStyle = resolveGridStyle(grid);
+    this.applyAxisStyles();
     this.renderAxes({ k: this.currentT.k, x: this.currentT.x, y: this.currentT.y });
   }
 
@@ -742,37 +750,24 @@ export class OverlayD3 {
 
     this.gXAxis.call(xAxis as any);
     this.gYAxis.call(yAxis as any);
+  }
 
-    this.gXAxis.selectAll(".domain").attr("opacity", 0.6).attr("stroke", grid.axisColor);
-    this.gYAxis.selectAll(".domain").attr("opacity", 0.6).attr("stroke", grid.axisColor);
-
-    this.gXAxis.selectAll(".tick line")
-      .attr("stroke", drawGridInAxisLayer ? grid.color : grid.axisColor)
-      .attr("stroke-width", grid.strokeWidth)
-      .attr("stroke-opacity", drawGridInAxisLayer ? grid.opacity : 0.45)
-      .attr("shape-rendering", "crispEdges");
-    this.gYAxis.selectAll(".tick line")
-      .attr("stroke", drawGridInAxisLayer ? grid.color : grid.axisColor)
-      .attr("stroke-width", grid.strokeWidth)
-      .attr("stroke-opacity", drawGridInAxisLayer ? grid.opacity : 0.45)
-      .attr("shape-rendering", "crispEdges");
-
+  private applyAxisStyles() {
+    const grid = this.gridStyle;
+    const drawGridInAxisLayer = !this.gGridRoot && grid.show;
+    const tickStroke = drawGridInAxisLayer ? grid.color : grid.axisColor;
+    const tickOpacity = drawGridInAxisLayer ? grid.opacity : 0.45;
     const xFontFamily = normalizeFontFamily(this.opts.xAxis.style?.fontFamily);
     const yFontFamily = normalizeFontFamily(this.opts.yAxis.style?.fontFamily);
     const xFontSizePx = clamp(this.opts.xAxis.style?.fontSizePx, 1, 96, 12);
     const yFontSizePx = clamp(this.opts.yAxis.style?.fontSizePx, 1, 96, 12);
-
-    this.gXAxis.selectAll(".tick text")
-      .attr("opacity", 0.9)
-      .attr("fill", grid.textColor)
-      .attr("font-family", xFontFamily)
-      .attr("font-size", `${xFontSizePx}px`);
-
-    this.gYAxis.selectAll(".tick text")
-      .attr("opacity", 0.9)
-      .attr("fill", grid.textColor)
-      .attr("font-family", yFontFamily)
-      .attr("font-size", `${yFontSizePx}px`);
+    const s = `[data-oid="${this._oid}"]`;
+    this._axisStyleEl.text(
+      `${s} .domain{opacity:0.6;stroke:${grid.axisColor}}` +
+      `${s} .tick line{stroke:${tickStroke};stroke-width:${grid.strokeWidth};stroke-opacity:${tickOpacity};shape-rendering:crispEdges}` +
+      `${s} .x-axis .tick text{opacity:0.9;fill:${grid.textColor};font-family:${xFontFamily};font-size:${xFontSizePx}px}` +
+      `${s} .y-axis .tick text{opacity:0.9;fill:${grid.textColor};font-family:${yFontFamily};font-size:${yFontSizePx}px}`
+    );
   }
 
   private renderGridLines(zx: any, zy: any, xTickCount: number, yTickCount: number) {
