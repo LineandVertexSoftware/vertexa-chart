@@ -198,6 +198,8 @@ export class OverlayD3 {
   private _dragUpHandler: ((e: MouseEvent) => void) | null = null;
   private readonly _oid = `ov${Math.random().toString(36).slice(2, 9)}`;
   private _axisStyleEl!: d3.Selection<SVGStyleElement, unknown, null, undefined>;
+  private _plotClipRect?: d3.Selection<SVGRectElement, unknown, null, undefined>;
+  private _gridClipRect?: d3.Selection<SVGRectElement, unknown, null, undefined>;
 
   constructor(private opts: OverlayOptions) {
     this.svgSel = d3.select(opts.svg);
@@ -205,20 +207,33 @@ export class OverlayD3 {
     if (opts.gridSvg) {
       this.gridSvgSel = d3.select(opts.gridSvg);
       this.gridSvgSel.style("overflow", "hidden").style("pointer-events", "none");
-      this.gGridRoot = this.gridSvgSel.append("g").attr("class", "grid-root");
+      this._gridClipRect = this.gridSvgSel
+        .append("defs")
+        .append("clipPath").attr("id", `${this._oid}-grid-clip`)
+        .append("rect").attr("x", 0).attr("y", 0);
+      this.gGridRoot = this.gridSvgSel.append("g").attr("class", "grid-root")
+        .attr("clip-path", `url(#${this._oid}-grid-clip)`);
     }
 
     this.svgSel.attr("data-oid", this._oid);
     // d3 infers HTMLStyleElement for "style" even on an SVG parent; cast via unknown.
     this._axisStyleEl = this.svgSel.append("style") as unknown as d3.Selection<SVGStyleElement, unknown, null, undefined>;
+    this._plotClipRect = this.svgSel
+      .append("defs")
+      .append("clipPath").attr("id", `${this._oid}-plot-clip`)
+      .append("rect").attr("x", 0).attr("y", 0);
 
     this.gRoot = this.svgSel.append("g").attr("class", "overlay-root");
     this.gXAxis = this.gRoot.append("g").attr("class", "x-axis");
     this.gYAxis = this.gRoot.append("g").attr("class", "y-axis");
-    this.gAnnotations = this.gRoot.append("g").attr("class", "annotations").style("pointer-events", "none");
+    this.gAnnotations = this.gRoot.append("g").attr("class", "annotations")
+      .style("pointer-events", "none")
+      .attr("clip-path", `url(#${this._oid}-plot-clip)`);
 
     // Guides (in plot coords)
-    this.gGuides = this.gRoot.append("g").attr("class", "guides").style("pointer-events", "none");
+    this.gGuides = this.gRoot.append("g").attr("class", "guides")
+      .style("pointer-events", "none")
+      .attr("clip-path", `url(#${this._oid}-plot-clip)`);
     this.vGuide = this.gGuides.append("line")
       .attr("class", "v-guide")
       .attr("stroke", "#111")
@@ -243,6 +258,7 @@ export class OverlayD3 {
       .attr("stroke-width", 1)
       .attr("stroke-dasharray", "4 3")
       .attr("visibility", "hidden")
+      .attr("clip-path", `url(#${this._oid}-plot-clip)`)
       .style("pointer-events", "none");
     this.selectionPath = this.gRoot.append("path")
       .attr("class", "selection-path")
@@ -251,6 +267,7 @@ export class OverlayD3 {
       .attr("stroke-width", 1)
       .attr("stroke-dasharray", "4 3")
       .attr("visibility", "hidden")
+      .attr("clip-path", `url(#${this._oid}-plot-clip)`)
       .style("pointer-events", "none");
 
     // Legend in SVG coords (top-right)
@@ -295,6 +312,8 @@ export class OverlayD3 {
     this.gYAxis.attr("transform", `translate(0,0)`);
 
     this.zoomRect.attr("x", 0).attr("y", 0).attr("width", plotW).attr("height", plotH);
+    this._plotClipRect?.attr("width", plotW).attr("height", plotH);
+    this._gridClipRect?.attr("width", plotW).attr("height", plotH);
 
     // Legend anchor
     this.gLegend.attr("transform", `translate(${padding.l + plotW - 8},${padding.t + 8})`);
