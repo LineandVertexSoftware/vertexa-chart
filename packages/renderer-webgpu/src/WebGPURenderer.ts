@@ -549,35 +549,38 @@ export class WebGPURenderer {
     );
     this.device.queue.submit([encoder.finish()]);
 
-    await readback.mapAsync(GPUMapMode.READ);
-    const mapped = new Uint8Array(readback.getMappedRange());
-    const rgba = new Uint8ClampedArray(w * h * 4);
-    const isBgra = String(this.format).startsWith("bgra8");
+    try {
+      await readback.mapAsync(GPUMapMode.READ);
+      const mapped = new Uint8Array(readback.getMappedRange());
+      const rgba = new Uint8ClampedArray(w * h * 4);
+      const isBgra = String(this.format).startsWith("bgra8");
 
-    for (let y = 0; y < h; y++) {
-      const rowOffset = y * bytesPerRow;
-      const outOffset = y * w * 4;
-      for (let x = 0; x < w; x++) {
-        const src = rowOffset + x * 4;
-        const dst = outOffset + x * 4;
-        if (isBgra) {
-          rgba[dst + 0] = mapped[src + 2];
-          rgba[dst + 1] = mapped[src + 1];
-          rgba[dst + 2] = mapped[src + 0];
-          rgba[dst + 3] = mapped[src + 3];
-        } else {
-          rgba[dst + 0] = mapped[src + 0];
-          rgba[dst + 1] = mapped[src + 1];
-          rgba[dst + 2] = mapped[src + 2];
-          rgba[dst + 3] = mapped[src + 3];
+      for (let y = 0; y < h; y++) {
+        const rowOffset = y * bytesPerRow;
+        const outOffset = y * w * 4;
+        for (let x = 0; x < w; x++) {
+          const src = rowOffset + x * 4;
+          const dst = outOffset + x * 4;
+          if (isBgra) {
+            rgba[dst + 0] = mapped[src + 2];
+            rgba[dst + 1] = mapped[src + 1];
+            rgba[dst + 2] = mapped[src + 0];
+            rgba[dst + 3] = mapped[src + 3];
+          } else {
+            rgba[dst + 0] = mapped[src + 0];
+            rgba[dst + 1] = mapped[src + 1];
+            rgba[dst + 2] = mapped[src + 2];
+            rgba[dst + 3] = mapped[src + 3];
+          }
         }
       }
-    }
 
-    readback.unmap();
-    readback.destroy();
-    targetTex.destroy();
-    return new ImageData(rgba, w, h);
+      readback.unmap();
+      return new ImageData(rgba, w, h);
+    } finally {
+      readback.destroy();
+      targetTex.destroy();
+    }
   }
 
   async pick(frame: FrameState, xCss: number, yCss: number): Promise<number> {
