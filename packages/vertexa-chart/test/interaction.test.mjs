@@ -58,70 +58,74 @@ function keyboardEventStub(key, extra = {}) {
   return event;
 }
 
+const BASE_THEME = {
+  colors: {
+    background: "#ffffff",
+    text: "#111827",
+    axis: "#9ca3af",
+    grid: "#e5e7eb",
+    tooltipBackground: "rgba(0,0,0,0.75)",
+    tooltipText: "#ffffff",
+    palette: ["#1f77b4", "#ff7f0e", "#2ca02c"]
+  },
+  fonts: {
+    family: "sans-serif",
+    sizePx: 12,
+    axisFamily: "sans-serif",
+    axisSizePx: 12,
+    tooltipFamily: "sans-serif",
+    tooltipSizePx: 12
+  },
+  axis: {
+    color: "#9ca3af",
+    textColor: "#4b5563",
+    fontFamily: "sans-serif",
+    fontSizePx: 12
+  },
+  grid: {
+    show: true,
+    color: "#e5e7eb",
+    opacity: 1,
+    strokeWidth: 1
+  },
+  tooltip: {
+    background: "rgba(0,0,0,0.75)",
+    textColor: "#ffffff",
+    fontFamily: "sans-serif",
+    fontSizePx: 12,
+    borderRadiusPx: 8,
+    paddingX: 8,
+    paddingY: 6,
+    boxShadow: "0 8px 20px rgba(0,0,0,0.18)"
+  }
+};
+
+const BASE_PADDING = { l: 20, r: 20, t: 20, b: 20 };
+const BASE_ZOOM = { k: 1, x: 0, y: 0 };
+
 function baseChart(Chart) {
   return Object.assign(Object.create(Chart.prototype), {
     destroyed: false,
     initialized: true,
     width: 320,
     height: 240,
-    padding: { l: 20, r: 20, t: 20, b: 20 },
+    padding: BASE_PADDING,
     layout: {},
-    theme: {
-      colors: {
-        background: "#ffffff",
-        text: "#111827",
-        axis: "#9ca3af",
-        grid: "#e5e7eb",
-        tooltipBackground: "rgba(0,0,0,0.75)",
-        tooltipText: "#ffffff",
-        palette: ["#1f77b4", "#ff7f0e", "#2ca02c"]
-      },
-      fonts: {
-        family: "sans-serif",
-        sizePx: 12,
-        axisFamily: "sans-serif",
-        axisSizePx: 12,
-        tooltipFamily: "sans-serif",
-        tooltipSizePx: 12
-      },
-      axis: {
-        color: "#9ca3af",
-        textColor: "#4b5563",
-        fontFamily: "sans-serif",
-        fontSizePx: 12
-      },
-      grid: {
-        show: true,
-        color: "#e5e7eb",
-        opacity: 1,
-        strokeWidth: 1
-      },
-      tooltip: {
-        background: "rgba(0,0,0,0.75)",
-        textColor: "#ffffff",
-        fontFamily: "sans-serif",
-        fontSizePx: 12,
-        borderRadiusPx: 8,
-        paddingX: 8,
-        paddingY: 6,
-        boxShadow: "0 8px 20px rgba(0,0,0,0.18)"
-      }
-    },
+    theme: BASE_THEME,
     traces: [],
-    traceData: [],
-    markerNormByTrace: new Map(),
-    heatmapValueByTrace: new Map(),
-    heatmapHoverSizeByTrace: new Map(),
-    markerNormLayers: [],
-    idRanges: [],
-    xSorted: [],
-    ySorted: [],
-    zoom: { k: 1, x: 0, y: 0 },
-    dpr: 1,
-    traceToMarkerLayerIdx: new Map(),
-    traceToLineLayerIdxs: new Map(),
-    markerNormByTraceDirty: new Set()
+    zoom: BASE_ZOOM,
+    dpr: 1
   });
+}
+
+// Minimal AxisManager mock for SceneCompiler.compile
+function mockAxisManager(overrides = {}) {
+  return {
+    resolveAxisType: () => "linear",
+    getAxis: () => undefined,
+    getHoverMode: () => "closest",
+    ...overrides
+  };
 }
 
 test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => {
@@ -137,47 +141,67 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   });
 
   const { Chart } = await import("../dist/Chart.js");
+  const { GridIndex } = await import("../dist/GridIndex.js");
+  const { SceneCompiler } = await import("../dist/SceneCompiler.js");
+  const { HoverManager } = await import("../dist/HoverManager.js");
+  const { AxisManager } = await import("../dist/AxisManager.js");
+  const { ExportManager } = await import("../dist/ExportManager.js");
+  const { computeAxisDomain } = await import("../dist/scene.js");
 
   await t.test("zoom/pan triggers grid rebuild thresholds", () => {
-    const chart = baseChart(Chart);
-    Object.assign(chart, {
-      gridBuilt: true,
-      lastGridZoomK: 1,
-      lastGridZoomX: 0,
-      lastGridZoomY: 0,
-      gridMinScaleRelDelta: 0.06,
-      gridMinTransRelDelta: 0.3
-    });
+    const gridIndex = new GridIndex();
+    const baseParams = {
+      markerNormLayers: [],
+      width: 320,
+      height: 240,
+      padding: BASE_PADDING,
+      zoom: { k: 1, x: 0, y: 0 }
+    };
 
-    chart.zoom = { k: 1, x: 40, y: 0 };
-    assert.equal(chart.shouldRebuildGrid(), false);
+    // Build at initial zoom to establish baseline
+    gridIndex.build(baseParams);
 
-    chart.zoom = { k: 1, x: 90, y: 0 };
-    assert.equal(chart.shouldRebuildGrid(), true);
+    // Small pan (40px / plotW=280 = 0.143 < 0.3) — should NOT rebuild
+    assert.equal(gridIndex.shouldRebuild({ ...baseParams, zoom: { k: 1, x: 40, y: 0 } }), false);
 
-    chart.zoom = { k: 1.08, x: 0, y: 0 };
-    assert.equal(chart.shouldRebuildGrid(), true);
+    // Large pan (90px / 280 = 0.321 > 0.3) — should rebuild
+    assert.equal(gridIndex.shouldRebuild({ ...baseParams, zoom: { k: 1, x: 90, y: 0 } }), true);
+
+    // Scale change (dk = 0.08/1 = 0.08 >= 0.06) — should rebuild
+    assert.equal(gridIndex.shouldRebuild({ ...baseParams, zoom: { k: 1.08, x: 0, y: 0 } }), true);
   });
 
   await t.test("hover outside plot clears guides/highlight and emits event", () => {
     const setHoverGuides = spy();
     const setHoverHighlight = spy();
-    const hideTooltip = spy();
     const requestRender = spy();
     const hoverEvents = [];
+    const tooltip = tooltipElementStub();
 
-    const chart = baseChart(Chart);
-    Object.assign(chart, {
-      hoverThrottleMs: 0,
-      lastHoverTs: -Infinity,
-      overlay: { setHoverGuides },
-      renderer: { setHoverHighlight },
-      hideTooltip,
-      requestRender,
-      onHoverHook: (event) => hoverEvents.push(event)
-    });
+    const hoverManager = new HoverManager(
+      null, // pickingEngine — not used for outside hover
+      { setHoverHighlight }, // renderer
+      () => ({ setHoverGuides }), // getOverlay
+      tooltip,
+      () => ({
+        destroyed: false,
+        hoverThrottleMs: 0,
+        pickingMode: "cpu",
+        width: 320,
+        height: 240,
+        dpr: 1,
+        padding: BASE_PADDING,
+        zoom: BASE_ZOOM,
+        traces: [],
+        theme: BASE_THEME
+      }),
+      { onHover: (event) => hoverEvents.push(event) },
+      { getHoverMode: () => "closest" }, // axisManager
+      { markerNormLayers: [] }, // sceneCompiler
+      requestRender
+    );
 
-    chart.onHover({
+    hoverManager.onHover({
       inside: false,
       xSvg: 11,
       ySvg: 22,
@@ -191,7 +215,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     assert.deepEqual(setHoverGuides.calls[0], [null]);
     assert.equal(setHoverHighlight.calls.length, 1);
     assert.deepEqual(setHoverHighlight.calls[0], [null]);
-    assert.equal(hideTooltip.calls.length, 1);
+    // tooltip is hidden via setAttribute
+    assert.equal(tooltip.getAttribute("aria-hidden"), "true");
     assert.equal(requestRender.calls.length, 1);
 
     assert.equal(hoverEvents.length, 1);
@@ -202,7 +227,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
 
   await t.test("legend toggle flips visibility and emits hook payload", () => {
     const rendererSetLayers = spy();
-    const rebuildGridIndex = spy();
+    const rebuildGridIndex = spy(() => ({ buildMs: 0 }));
     const setAxes = spy();
     const setGrid = spy();
     const setAnnotations = spy();
@@ -214,17 +239,23 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     const chart = baseChart(Chart);
     Object.assign(chart, {
       traces: [{ type: "scatter", x: [1], y: [2], visible: true, name: "A" }],
-      compileScene: () => ({ markers: [], lines: [] }),
+      sceneCompiler: {
+        compile: spy(() => ({ markers: [], lines: [] })),
+        xDomainNum: [0, 1],
+        yDomainNum: [0, 1],
+        markerNormLayers: []
+      },
       renderer: { setLayers: rendererSetLayers },
-      rebuildGridIndex,
-      resolveAxisType: () => "linear",
-      xDomainNum: [0, 1],
-      yDomainNum: [0, 1],
-      makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
-      layout: {},
-      makeOverlayAnnotations: () => [],
+      gridIndex: { build: rebuildGridIndex, scheduleRebuild: scheduleGridRebuild },
+      axisManager: {
+        resolveAxisType: () => "linear",
+        makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
+        resolveOverlayGrid: () => ({ show: true }),
+        makeOverlayAnnotations: () => [],
+        isLegendVisible: () => false
+      },
       overlay: { setAxes, setGrid, setAnnotations, setLegend },
-      scheduleGridRebuild,
+      enablePerfMonitoring: false,
       render,
       onLegendToggleHook: (event) => legendEvents.push(event)
     });
@@ -268,7 +299,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       svg,
       overlay: { setSize: overlaySetSize },
       render,
-      scheduleGridRebuild
+      gridIndex: { scheduleRebuild: scheduleGridRebuild },
+      aspectLockEnabled: false
     });
 
     chart.setSize(640, 480);
@@ -333,24 +365,36 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
 
   await t.test("box select emits selected point indices grouped by trace", () => {
     const selectEvents = [];
-    const chart = baseChart(Chart);
-    Object.assign(chart, {
-      markerNormLayers: [
-        { traceIndex: 0, points01: new Float32Array([0.1, 0.1, 0.4, 0.4, 0.9, 0.9]) },
-        { traceIndex: 2, points01: new Float32Array([0.3, 0.35, 0.8, 0.2]) }
-      ],
-      onSelectHook: (event) => selectEvents.push(event)
-    });
 
-    chart.handleBoxSelect({
+    // toScreenFromNorm with padding={l:20,r:20,t:20,b:20}, width=320, height=240, zoom={k:1,x:0,y:0}:
+    // screenX = 20 + xn * 280, screenY = 20 + yn * 200
+    const mockPickingEngine = {
+      toScreenFromNorm(xn, yn) {
+        return { screenX: 20 + xn * 280, screenY: 20 + yn * 200 };
+      }
+    };
+    const markerNormLayers = [
+      { traceIndex: 0, points01: new Float32Array([0.1, 0.1, 0.4, 0.4, 0.9, 0.9]) },
+      { traceIndex: 2, points01: new Float32Array([0.3, 0.35, 0.8, 0.2]) }
+    ];
+
+    const hoverManager = new HoverManager(
+      mockPickingEngine,
+      null,
+      () => undefined,
+      tooltipElementStub(),
+      () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces: [], theme: BASE_THEME }),
+      { onSelect: (event) => selectEvents.push(event) },
+      { getHoverMode: () => "closest" },
+      { markerNormLayers },
+      () => {}
+    );
+
+    hoverManager.handleSelection({
       x0Svg: 40,
       y0Svg: 30,
       x1Svg: 170,
       y1Svg: 120,
-      x0Plot: 20,
-      y0Plot: 10,
-      x1Plot: 150,
-      y1Plot: 100,
       x0Data: 0,
       y0Data: 0,
       x1Data: 1,
@@ -370,25 +414,35 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
 
   await t.test("lasso select emits selected point indices grouped by trace", () => {
     const selectEvents = [];
-    const chart = baseChart(Chart);
-    Object.assign(chart, {
-      markerNormLayers: [
-        { traceIndex: 0, points01: new Float32Array([0.1, 0.1, 0.4, 0.4, 0.9, 0.9]) },
-        { traceIndex: 2, points01: new Float32Array([0.3, 0.35, 0.8, 0.2]) }
-      ],
-      onSelectHook: (event) => selectEvents.push(event)
-    });
 
-    chart.handleSelection({
+    const mockPickingEngine = {
+      toScreenFromNorm(xn, yn) {
+        return { screenX: 20 + xn * 280, screenY: 20 + yn * 200 };
+      }
+    };
+    const markerNormLayers = [
+      { traceIndex: 0, points01: new Float32Array([0.1, 0.1, 0.4, 0.4, 0.9, 0.9]) },
+      { traceIndex: 2, points01: new Float32Array([0.3, 0.35, 0.8, 0.2]) }
+    ];
+
+    const hoverManager = new HoverManager(
+      mockPickingEngine,
+      null,
+      () => undefined,
+      tooltipElementStub(),
+      () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces: [], theme: BASE_THEME }),
+      { onSelect: (event) => selectEvents.push(event) },
+      { getHoverMode: () => "closest" },
+      { markerNormLayers },
+      () => {}
+    );
+
+    hoverManager.handleSelection({
       mode: "lasso",
       x0Svg: 40,
       y0Svg: 30,
       x1Svg: 170,
       y1Svg: 130,
-      x0Plot: 20,
-      y0Plot: 10,
-      x1Plot: 150,
-      y1Plot: 110,
       x0Data: 0,
       y0Data: 0,
       x1Data: 1,
@@ -424,14 +478,18 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   });
 
   await t.test("tooltip formatter provides plain-text tooltip content", () => {
-    const chart = baseChart(Chart);
     const tooltip = tooltipElementStub();
-    Object.assign(chart, {
-      tooltip,
-      tooltipFormatter: (ctx) => `#${ctx.traceIndex}:${ctx.pointIndex} x=${ctx.x} y=${ctx.y}`
-    });
 
-    chart.showTooltip({
+    const hoverManager = new HoverManager(
+      null, null, () => undefined, tooltip,
+      () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces: [], theme: BASE_THEME }),
+      { tooltipFormatter: (ctx) => `#${ctx.traceIndex}:${ctx.pointIndex} x=${ctx.x} y=${ctx.y}` },
+      { getHoverMode: () => "closest" },
+      { markerNormLayers: [] },
+      () => {}
+    );
+
+    hoverManager.showTooltip({
       traceIndex: 1,
       pointIndex: 7,
       trace: { type: "scatter", x: [1], y: [2] },
@@ -447,14 +505,18 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   });
 
   await t.test("tooltip renderer can return html string and hide tooltip", () => {
-    const chart = baseChart(Chart);
     const tooltip = tooltipElementStub();
-    Object.assign(chart, {
-      tooltip,
-      tooltipRenderer: (ctx) => (ctx.pointIndex % 2 === 0 ? `<b>${ctx.defaultLabel}</b>` : null)
-    });
 
-    chart.showTooltip({
+    const hoverManager = new HoverManager(
+      null, null, () => undefined, tooltip,
+      () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces: [], theme: BASE_THEME }),
+      { tooltipRenderer: (ctx) => (ctx.pointIndex % 2 === 0 ? `<b>${ctx.defaultLabel}</b>` : null) },
+      { getHoverMode: () => "closest" },
+      { markerNormLayers: [] },
+      () => {}
+    );
+
+    hoverManager.showTooltip({
       traceIndex: 0,
       pointIndex: 4,
       trace: { type: "scatter", x: [1], y: [2] },
@@ -467,7 +529,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     assert.equal(tooltip.innerHTML, "<b>rendered</b>");
     assert.equal(tooltip.style.transform, "translate(22px, 32px)");
 
-    chart.showTooltip({
+    hoverManager.showTooltip({
       traceIndex: 0,
       pointIndex: 5,
       trace: { type: "scatter", x: [1], y: [2] },
@@ -481,22 +543,43 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   });
 
   await t.test("fixed tick values are propagated to overlay axis spec", () => {
-    const chart = baseChart(Chart);
-    chart.layout = {
-      xaxis: { tickValues: [0, 2.5, 5] },
-      yaxis: {}
-    };
+    const axisManager = new AxisManager(() => ({
+      layout: {
+        xaxis: { tickValues: [0, 2.5, 5] },
+        yaxis: {}
+      },
+      traces: [],
+      theme: BASE_THEME,
+      zoom: BASE_ZOOM,
+      xDomainNum: [0, 5],
+      yDomainNum: [0, 1],
+      width: 320,
+      height: 240,
+      padding: BASE_PADDING
+    }));
 
-    const linear = chart.makeOverlayAxisSpec("x", "linear", [0, 5]);
+    const linear = axisManager.makeOverlayAxisSpec("x", "linear", [0, 5]);
     assert.deepEqual(linear.tickValues, [0, 2.5, 5]);
 
     const t0 = new Date("2024-01-01T00:00:00.000Z");
     const t1 = new Date("2024-01-01T01:00:00.000Z");
-    chart.layout = {
-      xaxis: { tickValues: [t0, t1.getTime()] },
-      yaxis: {}
-    };
-    const timeSpec = chart.makeOverlayAxisSpec("x", "time", [t0.getTime(), t1.getTime()]);
+
+    const axisManagerTime = new AxisManager(() => ({
+      layout: {
+        xaxis: { tickValues: [t0, t1.getTime()] },
+        yaxis: {}
+      },
+      traces: [],
+      theme: BASE_THEME,
+      zoom: BASE_ZOOM,
+      xDomainNum: [t0.getTime(), t1.getTime()],
+      yDomainNum: [0, 1],
+      width: 320,
+      height: 240,
+      padding: BASE_PADDING
+    }));
+
+    const timeSpec = axisManagerTime.makeOverlayAxisSpec("x", "time", [t0.getTime(), t1.getTime()]);
     assert.equal(timeSpec.tickValues.length, 2);
     assert.equal(timeSpec.tickValues[0] instanceof Date, true);
     assert.equal(timeSpec.tickValues[1] instanceof Date, true);
@@ -518,16 +601,22 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         { type: "scatter", x: [0, 1], y: [10, 11], visible: true, name: "A" },
         { type: "scatter", x: new Float32Array([0, 1]), y: new Float32Array([20, 21]), visible: true, name: "B" }
       ],
-      compileScene: () => ({ markers: [], lines: [] }),
+      dataMutationManager: { tryAppendFast: () => false },
+      sceneCompiler: {
+        compile: spy(() => ({ markers: [], lines: [] })),
+        xDomainNum: [0, 1],
+        yDomainNum: [0, 1],
+        markerNormLayers: []
+      },
       renderer: { setLayers: rendererSetLayers },
-      resolveAxisType: () => "linear",
-      xDomainNum: [0, 1],
-      yDomainNum: [0, 1],
-      makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
-      resolveOverlayGrid: () => ({ show: true }),
-      makeOverlayAnnotations: () => [],
+      axisManager: {
+        resolveAxisType: () => "linear",
+        makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
+        resolveOverlayGrid: () => ({ show: true }),
+        makeOverlayAnnotations: () => []
+      },
       overlay: { setAxes, setGrid, setAnnotations },
-      scheduleGridRebuild,
+      gridIndex: { scheduleRebuild: scheduleGridRebuild },
       render
     });
 
@@ -553,16 +642,25 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   });
 
   await t.test("makeOverlayAnnotations converts annotation datums by axis type", () => {
-    const chart = baseChart(Chart);
     const t0 = new Date("2024-01-01T00:00:00.000Z");
-    chart.layout = {
-      annotations: [
-        { type: "line", x0: t0, y0: 1, x1: t0.getTime() + 3600000, y1: 2 },
-        { type: "label", x: t0, y: 3, text: "checkpoint" }
-      ]
-    };
+    const axisManager = new AxisManager(() => ({
+      layout: {
+        annotations: [
+          { type: "line", x0: t0, y0: 1, x1: t0.getTime() + 3600000, y1: 2 },
+          { type: "label", x: t0, y: 3, text: "checkpoint" }
+        ]
+      },
+      traces: [],
+      theme: BASE_THEME,
+      zoom: BASE_ZOOM,
+      xDomainNum: [0, 1],
+      yDomainNum: [0, 1],
+      width: 320,
+      height: 240,
+      padding: BASE_PADDING
+    }));
 
-    const out = chart.makeOverlayAnnotations("time", "linear");
+    const out = axisManager.makeOverlayAnnotations("time", "linear");
     assert.equal(out.length, 2);
     assert.equal(out[0].type, "line");
     assert.equal(out[0].x0 instanceof Date, true);
@@ -609,15 +707,23 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     Object.assign(chart, {
       canvas: { id: "render-canvas" },
       svgGrid: { id: "grid-layer" },
-      svg: { id: "overlay-layer" },
-      initPromise: Promise.resolve(),
-      createExportCanvas: (width, height) => {
-        exportCanvas.width = width;
-        exportCanvas.height = height;
-        return exportCanvas;
-      },
-      drawSvgLayerToContext
+      svg: { id: "overlay-layer" }
     });
+
+    const exportManager = new ExportManager(
+      () => ({ width: chart.width, height: chart.height, dpr: chart.dpr, padding: chart.padding, zoom: chart.zoom, theme: chart.theme, traces: chart.traces }),
+      {}, // renderer — no captureFrameImageData
+      () => ({ canvas: chart.canvas, svgGrid: chart.svgGrid, svg: chart.svg }),
+      async () => {}
+    );
+    // Override private methods on the instance (TypeScript private ≠ JS private)
+    exportManager.createExportCanvas = (w, h) => {
+      exportCanvas.width = w;
+      exportCanvas.height = h;
+      return exportCanvas;
+    };
+    exportManager.drawSvgLayerToContext = drawSvgLayerToContext;
+    chart.exportManager = exportManager;
 
     const out = await chart.exportPng({ pixelRatio: 2, background: "#010203" });
     assert.equal(out, blob);
@@ -641,11 +747,18 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     const chart = baseChart(Chart);
     Object.assign(chart, {
       svgGrid: { id: "grid-layer" },
-      svg: { id: "overlay-layer" },
-      initPromise: Promise.resolve(),
-      captureCanvasLayerDataUrl,
-      serializeSvgLayerForExport
+      svg: { id: "overlay-layer" }
     });
+
+    const exportManager = new ExportManager(
+      () => ({ width: chart.width, height: chart.height, dpr: chart.dpr, padding: chart.padding, zoom: chart.zoom, theme: chart.theme, traces: chart.traces }),
+      {},
+      () => ({ canvas: null, svgGrid: chart.svgGrid, svg: chart.svg }),
+      async () => {}
+    );
+    exportManager.captureCanvasLayerDataUrl = captureCanvasLayerDataUrl;
+    exportManager.serializeSvgLayerForExport = serializeSvgLayerForExport;
+    chart.exportManager = exportManager;
 
     const out = await chart.exportSvg({ pixelRatio: 2, background: "#010203" });
     const markup = await out.text();
@@ -659,8 +772,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   });
 
   await t.test("exportCsvPoints flattens visible traces and can include hidden traces", async () => {
-    const chart = baseChart(Chart);
-    chart.traces = [
+    const traces = [
       {
         type: "scatter",
         name: "Alpha,One",
@@ -678,6 +790,15 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       }
     ];
 
+    const exportManager = new ExportManager(
+      () => ({ traces, width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, theme: BASE_THEME }),
+      null, null, null
+    );
+
+    const chart = baseChart(Chart);
+    chart.traces = traces;
+    chart.exportManager = exportManager;
+
     const visibleOnly = await chart.exportCsvPoints().text();
     assert.match(visibleOnly, /^traceIndex,traceName,traceType,pointIndex,x,y,z/m);
     assert.match(visibleOnly, /0,"Alpha,One",scatter,0,2026-01-01T00:00:00.000Z,3,/);
@@ -689,8 +810,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   });
 
   await t.test("theme merges grid defaults and axis style into overlay specs", () => {
-    const chart = baseChart(Chart);
-    chart.theme = {
+    const theme = {
       colors: {
         background: "#ffffff",
         text: "#111827",
@@ -731,13 +851,24 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         boxShadow: "0 8px 20px rgba(0,0,0,0.18)"
       }
     };
-    chart.layout = {
-      xaxis: {},
-      yaxis: {},
-      grid: { opacity: 0.42, show: false }
-    };
 
-    const grid = chart.resolveOverlayGrid();
+    const axisManager = new AxisManager(() => ({
+      layout: {
+        xaxis: {},
+        yaxis: {},
+        grid: { opacity: 0.42, show: false }
+      },
+      traces: [],
+      theme,
+      zoom: BASE_ZOOM,
+      xDomainNum: [0, 1],
+      yDomainNum: [0, 1],
+      width: 320,
+      height: 240,
+      padding: BASE_PADDING
+    }));
+
+    const grid = axisManager.resolveOverlayGrid();
     assert.deepEqual(grid, {
       show: false,
       color: "#cbd5e1",
@@ -747,13 +878,12 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       strokeWidth: 2
     });
 
-    const spec = chart.makeOverlayAxisSpec("x", "linear", [0, 1]);
+    const spec = axisManager.makeOverlayAxisSpec("x", "linear", [0, 1]);
     assert.equal(spec.style.fontFamily, "IBM Plex Sans");
     assert.equal(spec.style.fontSizePx, 13);
   });
 
   await t.test("axis min/max bounds clamp computed autorange domain", () => {
-    const chart = baseChart(Chart);
     const traces = [
       {
         type: "scatter",
@@ -762,19 +892,18 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       }
     ];
 
-    const d = chart.computeAxisDomain(traces, "x", { min: 20, max: 80 }, "linear");
+    const d = computeAxisDomain(traces, "x", { min: 20, max: 80 }, "linear");
     assert.deepEqual(d, [20, 80]);
 
-    const noDataMin = chart.computeAxisDomain([], "x", { min: 10 }, "linear");
+    const noDataMin = computeAxisDomain([], "x", { min: 10 }, "linear");
     assert.deepEqual(noDataMin, [10, 11]);
 
-    const noDataMax = chart.computeAxisDomain([], "x", { max: 25 }, "linear");
+    const noDataMax = computeAxisDomain([], "x", { max: 25 }, "linear");
     assert.deepEqual(noDataMax, [0, 1]);
   });
 
   await t.test("bar traces compile to line layers and keep pick metadata", () => {
-    const chart = baseChart(Chart);
-    chart.traces = [
+    const traces = [
       {
         type: "bar",
         x: [0, 1, 2],
@@ -785,20 +914,21 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       }
     ];
 
-    const scene = chart.compileScene();
+    const sceneCompiler = new SceneCompiler();
+    const scene = sceneCompiler.compile(traces, mockAxisManager(), BASE_THEME, 320, 240, BASE_PADDING);
+
     assert.equal(scene.lines.length, 1);
     assert.equal(scene.lines[0].widthPx, 14);
     assert.equal(scene.markers.length, 1);
     assert.equal(scene.markers[0].pointSizePx, 14);
     assert.equal(scene.markers[0].rgba[3], 0);
-    assert.equal(chart.idRanges.length, 1);
-    assert.equal(chart.idRanges[0].count, 3);
-    assert.equal(chart.yDomainNum[0] <= 0, true);
-    assert.equal(chart.yDomainNum[1] >= 8, true);
+    assert.equal(sceneCompiler.idRanges.length, 1);
+    assert.equal(sceneCompiler.idRanges[0].count, 3);
+    assert.equal(sceneCompiler.yDomainNum[0] <= 0, true);
+    assert.equal(sceneCompiler.yDomainNum[1] >= 8, true);
   });
 
   await t.test("bar y-axis autorange includes explicit base value", () => {
-    const chart = baseChart(Chart);
     const traces = [
       {
         type: "bar",
@@ -808,14 +938,13 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       }
     ];
 
-    const domain = chart.computeAxisDomain(traces, "y", undefined, "linear");
+    const domain = computeAxisDomain(traces, "y", undefined, "linear");
     assert.equal(domain[0] <= 4, true);
     assert.equal(domain[1] >= 9, true);
   });
 
   await t.test("area traces compile to fill + boundary layers and keep pick metadata", () => {
-    const chart = baseChart(Chart);
-    chart.traces = [
+    const traces = [
       {
         type: "area",
         x: [0, 1, 2, 3],
@@ -829,18 +958,19 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       }
     ];
 
-    const scene = chart.compileScene();
+    const sceneCompiler = new SceneCompiler();
+    const scene = sceneCompiler.compile(traces, mockAxisManager(), BASE_THEME, 320, 240, BASE_PADDING);
+
     assert.equal(scene.lines.length, 2);
     assert.equal(scene.markers.length, 1);
     assert.equal(scene.markers[0].pointSizePx, 3);
-    assert.equal(chart.idRanges.length, 1);
-    assert.equal(chart.idRanges[0].count, 4);
-    assert.equal(chart.yDomainNum[0] <= 1, true);
-    assert.equal(chart.yDomainNum[1] >= 7, true);
+    assert.equal(sceneCompiler.idRanges.length, 1);
+    assert.equal(sceneCompiler.idRanges[0].count, 4);
+    assert.equal(sceneCompiler.yDomainNum[0] <= 1, true);
+    assert.equal(sceneCompiler.yDomainNum[1] >= 7, true);
   });
 
   await t.test("area y-axis autorange includes explicit base value", () => {
-    const chart = baseChart(Chart);
     const traces = [
       {
         type: "area",
@@ -850,14 +980,13 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       }
     ];
 
-    const domain = chart.computeAxisDomain(traces, "y", undefined, "linear");
+    const domain = computeAxisDomain(traces, "y", undefined, "linear");
     assert.equal(domain[0] <= 5, true);
     assert.equal(domain[1] >= 9, true);
   });
 
   await t.test("heatmap traces compile to per-cell line layers and keep pick metadata", () => {
-    const chart = baseChart(Chart);
-    chart.traces = [
+    const traces = [
       {
         type: "heatmap",
         x: [0, 1, 2],
@@ -875,19 +1004,20 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       }
     ];
 
-    const scene = chart.compileScene();
+    const sceneCompiler = new SceneCompiler();
+    const scene = sceneCompiler.compile(traces, mockAxisManager(), BASE_THEME, 320, 240, BASE_PADDING);
+
     assert.equal(scene.markers.length, 1);
     assert.equal(scene.lines.length, 6);
-    assert.equal(chart.idRanges.length, 1);
-    assert.equal(chart.idRanges[0].count, 6);
-    assert.equal(chart.traceData[0].xs.length, 6);
-    assert.equal(chart.traceData[0].ys.length, 6);
-    assert.equal(chart.heatmapValueByTrace.get(0).length, 6);
+    assert.equal(sceneCompiler.idRanges.length, 1);
+    assert.equal(sceneCompiler.idRanges[0].count, 6);
+    assert.equal(sceneCompiler.traceData[0].xs.length, 6);
+    assert.equal(sceneCompiler.traceData[0].ys.length, 6);
+    assert.equal(sceneCompiler.heatmapValueByTrace.get(0).length, 6);
   });
 
   await t.test("heatmap hover formatting resolves %{z}", () => {
-    const chart = baseChart(Chart);
-    chart.traces = [
+    const traces = [
       {
         type: "heatmap",
         name: "Heat",
@@ -900,9 +1030,21 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         hovertemplate: "%{trace.name} x=%{x} y=%{y} z=%{z}"
       }
     ];
-    chart.compileScene();
 
-    const label = chart.formatHover(chart.traces[0], {
+    const sceneCompiler = new SceneCompiler();
+    sceneCompiler.compile(traces, mockAxisManager(), BASE_THEME, 320, 240, BASE_PADDING);
+
+    const hoverManager = new HoverManager(
+      null, null, () => undefined, tooltipElementStub(),
+      () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces, theme: BASE_THEME }),
+      {},
+      { getHoverMode: () => "closest" },
+      sceneCompiler,
+      () => {}
+    );
+
+    // formatHover is private in TypeScript but accessible at runtime
+    const label = hoverManager.formatHover(traces[0], {
       traceIndex: 0,
       pointIndex: 1,
       x: 1,
