@@ -349,6 +349,9 @@ export class Chart implements ChartPublicApi {
       if (trace.type === "heatmap") {
         throw new Error(`Chart.appendPoints(): traceIndex ${update.traceIndex} is a heatmap trace; use setTraces().`);
       }
+      if (trace.type === "histogram") {
+        throw new Error(`Chart.appendPoints(): traceIndex ${update.traceIndex} is a histogram trace; use setTraces() to update binned data.`);
+      }
 
       const xNew = Array.from(update.x);
       const yNew = Array.from(update.y);
@@ -365,6 +368,8 @@ export class Chart implements ChartPublicApi {
     for (const { update, xNew, yNew, nNew, trimCount } of prepared) {
       if (nNew <= 0) continue;
       const trace = this.traces[update.traceIndex];
+      // histogram throws in the validation loop above; x/y are always present here
+      if (!trace.x || !trace.y) continue;
       const xOut = toMutableDatumArray(trace.x);
       const yOut = toMutableDatumArray(trace.y);
       for (let i = 0; i < nNew; i++) {
@@ -644,6 +649,9 @@ export class Chart implements ChartPublicApi {
         continue;
       }
 
+      // Histogram bin values are computed by SceneCompiler; skip raw data scan.
+      if (trace.type === "histogram") continue;
+
       const n = Math.min(trace.x.length, trace.y.length);
       for (let i = 0; i < n; i++) {
         const x = toNumber(trace.x[i], xType);
@@ -774,6 +782,14 @@ export class Chart implements ChartPublicApi {
   }
 
   private toRuntimeTrace(trace: Trace): Trace {
+    if (trace.type === "histogram") {
+      return {
+        ...trace,
+        visible: trace.visible ?? true,
+        x: trace.x ? Array.from(trace.x) : undefined,
+        y: trace.y ? Array.from(trace.y) : undefined
+      };
+    }
     return {
       ...trace,
       visible: trace.visible ?? true,

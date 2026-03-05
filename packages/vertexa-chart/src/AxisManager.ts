@@ -105,7 +105,7 @@ export class AxisManager {
     // Infer category axes from string-valued data.
     for (const trace of traces) {
       const arr = which === "x" ? trace.x : trace.y;
-      if (arr.length === 0) continue;
+      if (!arr || arr.length === 0) continue; // optional x/y (e.g. HistogramTrace)
       const probe = Math.min(arr.length, 8);
       for (let i = 0; i < probe; i++) {
         if (typeof arr[i] === "string") return "category";
@@ -115,6 +115,7 @@ export class AxisManager {
     // Infer time axes from Date-valued data when no explicit type is provided.
     for (const trace of traces) {
       const arr = which === "x" ? trace.x : trace.y;
+      if (!arr) continue; // optional x/y (e.g. HistogramTrace)
       const n = arr.length;
       if (n === 0) continue;
 

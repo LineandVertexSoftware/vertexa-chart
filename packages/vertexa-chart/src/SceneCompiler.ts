@@ -29,12 +29,14 @@ import {
   smoothLinePoints,
   getTraceColor,
   normalizeBarBaseY,
+  normalizeScalarX,
   normalizeScalarY,
   normalizeAreaBaseY,
   computeAreaFillWidthPx,
   computeStackedYDomain,
   type BarStackEntry
 } from "./scene.js";
+import { computeHistogram, type ComputedHistogram } from "./histogram.js";
 import type { AxisManager } from "./AxisManager.js";
 
 export type TraceDataEntry = { xs: Datum[]; ys: Datum[]; name: string };
@@ -87,6 +89,9 @@ export class SceneCompiler {
     }
     validateCategoryConsistency(traces, xType, yType);
 
+    // Pre-compute histogram bins (needs axis types, independent of domain).
+    const histogramData = computeAllHistogramData(traces, xType, yType);
+
     // Cache raw trace data by source trace index to keep ID->trace mapping stable.
     this.traceData = new Array(traces.length).fill(null);
     this.heatmapValueByTrace.clear();
@@ -118,6 +123,16 @@ export class SceneCompiler {
         continue;
       }
 
+      if (trace.type === "histogram") {
+        // Store computed bin centres / values so the hover/picking system can
+        // return meaningful x/y data without exposing raw input arrays.
+        const hd = histogramData.get(traceIndex);
+        const xs: Datum[] = hd ? Array.from(hd.binCenters) : [];
+        const ys: Datum[] = hd ? Array.from(hd.binValues)  : [];
+        this.traceData[traceIndex] = { xs, ys, name: trace.name ?? `Trace ${traceIndex + 1}` };
+        continue;
+      }
+
       const n = Math.min(trace.x.length, trace.y.length);
       const xs: Datum[] = new Array(n);
       const ys: Datum[] = new Array(n);
@@ -131,6 +146,29 @@ export class SceneCompiler {
     // compute domains from traces (include legendonly by default to keep axes stable)
     this.xDomainNum = computeAxisDomain(traces, "x", axisManager.getAxis("x"), xType, this.xCategories ?? undefined);
     this.yDomainNum = computeAxisDomain(traces, "y", axisManager.getAxis("y"), yType, this.yCategories ?? undefined);
+
+    // Extend domain to cover histogram bin extents and bar heights.
+    for (const [, hd] of histogramData) {
+      if (hd.binEdges.length < 2) continue;
+      const edgeMin = hd.binEdges[0];
+      const edgeMax = hd.binEdges[hd.binEdges.length - 1];
+      let valueMax = 0;
+      for (let i = 0; i < hd.binValues.length; i++) {
+        if (hd.binValues[i] > valueMax) valueMax = hd.binValues[i];
+      }
+      const pad = valueMax * 0.05;
+      if (hd.orientation === "v") {
+        const [xd0, xd1] = this.xDomainNum;
+        const [yd0, yd1] = this.yDomainNum;
+        this.xDomainNum = [Math.min(xd0, edgeMin), Math.max(xd1, edgeMax)];
+        this.yDomainNum = [Math.min(yd0, 0), Math.max(yd1, valueMax + pad)];
+      } else {
+        const [xd0, xd1] = this.xDomainNum;
+        const [yd0, yd1] = this.yDomainNum;
+        this.yDomainNum = [Math.min(yd0, edgeMin), Math.max(yd1, edgeMax)];
+        this.xDomainNum = [Math.min(xd0, 0), Math.max(xd1, valueMax + pad)];
+      }
+    }
 
     // barmode layout
     const barmode = axisManager.getBarMode();
@@ -381,6 +419,89 @@ export class SceneCompiler {
         return;
       }
 
+      if (trace.type === "histogram") {
+        const hd = histogramData.get(traceIndex);
+        if (!hd || hd.binCenters.length === 0) return;
+
+        const nBins = hd.binCenters.length;
+        const isH = hd.orientation === "h";
+        const plotH = Math.max(1, height - padding.t - padding.b);
+
+        // Compute bar visual size in pixels from bin width in data units.
+        const binSpan = hd.binEdges.length > 1 ? hd.binEdges[1] - hd.binEdges[0] : 1;
+        let barWidthPx: number;
+        if (trace.bar?.widthPx != null) {
+          barWidthPx = Math.max(1, trace.bar.widthPx);
+        } else if (isH) {
+          const [yd0, yd1] = this.yDomainNum;
+          barWidthPx = yd1 > yd0 ? Math.max(1, (binSpan / (yd1 - yd0)) * plotH * 0.98) : DEFAULT_BAR_WIDTH_PX;
+        } else {
+          const [xd0, xd1] = this.xDomainNum;
+          barWidthPx = xd1 > xd0 ? Math.max(1, (binSpan / (xd1 - xd0)) * plotWidth * 0.98) : DEFAULT_BAR_WIDTH_PX;
+        }
+
+        // Normalize bin centres and values into [0,1] space.
+        // For "v": x = centres, y = values.  For "h": x = values, y = centres.
+        const points01 = isH
+          ? normalizeInterleaved(hd.binValues, hd.binCenters, xType, yType, this.xDomainNum, this.yDomainNum)
+          : normalizeInterleaved(hd.binCenters, hd.binValues, xType, yType, this.xDomainNum, this.yDomainNum);
+        const count = points01.length / 2;
+        if (count <= 0) return;
+
+        const baseId = nextBaseId;
+        nextBaseId += count;
+        this.idRanges.push({ baseId, count, traceIndex });
+        this.markerNormByTrace.set(traceIndex, points01);
+        this.markerNormLayers.push({ traceIndex, points01 });
+
+        markers.push({
+          points01,
+          pointSizePx: Math.max(2, barWidthPx),
+          rgba: [0, 0, 0, 0],
+          baseId
+        });
+
+        const baseColor = getTraceColor(trace, traceIndex, theme.colors.palette);
+        const c = parseColor(baseColor) ?? [0.12, 0.55, 0.95];
+        const a = clamp01(trace.bar?.opacity ?? trace.marker?.opacity ?? 0.65);
+
+        const barPoints: number[] = [];
+        if (isH) {
+          // Horizontal bars: from x=0 to x=binValue[i] at y=binCentre[i].
+          const baseXn = normalizeScalarX(0, xType, this.xDomainNum);
+          for (let i = 0; i < nBins; i++) {
+            const yn    = points01[i * 2 + 1];
+            const topXn = points01[i * 2];
+            if (Number.isFinite(yn) && Number.isFinite(topXn) && Number.isFinite(baseXn)) {
+              barPoints.push(baseXn, yn, topXn, yn, Number.NaN, Number.NaN);
+            } else {
+              barPoints.push(Number.NaN, Number.NaN);
+            }
+          }
+        } else {
+          // Vertical bars: from y=0 to y=binValue[i] at x=binCentre[i].
+          const baseYn = normalizeScalarY(0, yType, this.yDomainNum);
+          for (let i = 0; i < nBins; i++) {
+            const xn    = points01[i * 2];
+            const topYn = points01[i * 2 + 1];
+            if (Number.isFinite(xn) && Number.isFinite(topYn) && Number.isFinite(baseYn)) {
+              barPoints.push(xn, baseYn, xn, topYn, Number.NaN, Number.NaN);
+            } else {
+              barPoints.push(Number.NaN, Number.NaN);
+            }
+          }
+        }
+
+        lines.push({
+          points01: new Float32Array(barPoints),
+          rgba: [c[0], c[1], c[2], a],
+          widthPx: barWidthPx,
+          dash: "solid"
+        });
+        return;
+      }
+
+      // scatter (default fallthrough — type narrowed to ScatterTrace here)
       const mode = trace.mode ?? "markers";
       const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum, this.xCatMap, this.yCatMap);
 
@@ -516,6 +637,55 @@ function computeBarStackData(traces: Trace[], xType: AxisType, yType: AxisType):
   return result;
 }
 
+// ----------------------------
+// Histogram layout helpers
+// ----------------------------
+
+type HistogramEntry = ComputedHistogram & { orientation: "v" | "h" };
+
+function computeAllHistogramData(traces: Trace[], xType: AxisType, yType: AxisType): Map<number, HistogramEntry> {
+  const result = new Map<number, HistogramEntry>();
+
+  for (let ti = 0; ti < traces.length; ti++) {
+    const t = traces[ti];
+    if (t.type !== "histogram") continue;
+    if ((t.visible ?? true) === false) continue;
+
+    // Determine orientation: explicit > presence of x > presence of y > default "v".
+    const orientation: "v" | "h" = t.orientation ?? (t.x ? "v" : (t.y ? "h" : "v"));
+
+    const binDimRaw  = orientation === "v" ? t.x : t.y;
+    const funcDimRaw = orientation === "v" ? t.y : t.x;
+    if (!binDimRaw || binDimRaw.length === 0) continue;
+
+    const binAxisType  = orientation === "v" ? xType : yType;
+    const funcAxisType = orientation === "v" ? yType : xType;
+    const histfunc = t.histfunc ?? "count";
+
+    // Convert Datum arrays to numbers.
+    const binData: number[] = [];
+    for (let i = 0; i < binDimRaw.length; i++) {
+      binData.push(toNumber(binDimRaw[i], binAxisType));
+    }
+
+    let funcData: number[] | null = null;
+    if (histfunc !== "count" && funcDimRaw && funcDimRaw.length > 0) {
+      funcData = [];
+      for (let i = 0; i < binDimRaw.length; i++) {
+        funcData.push(toNumber(funcDimRaw[i], funcAxisType));
+      }
+    }
+
+    const nbins    = orientation === "v" ? t.nbinsx : t.nbinsy;
+    const binsSpec = orientation === "v" ? t.xbins  : t.ybins;
+
+    const computed = computeHistogram(binData, funcData, histfunc, t.histnorm ?? "", nbins, binsSpec);
+    result.set(ti, { ...computed, orientation });
+  }
+
+  return result;
+}
+
 function validateCategoryConsistency(traces: Trace[], xType: AxisType, yType: AxisType): void {
   for (const which of ["x", "y"] as const) {
     const axisType = which === "x" ? xType : yType;
@@ -527,6 +697,7 @@ function validateCategoryConsistency(traces: Trace[], xType: AxisType, yType: Ax
       const t = traces[ti];
       if (t.visible === false) continue;
       const arr = which === "x" ? t.x : t.y;
+      if (!arr) continue; // optional x/y (e.g. HistogramTrace)
       for (let i = 0; i < arr.length; i++) {
         const v = arr[i];
         if (typeof v === "string") hasStrings = true;

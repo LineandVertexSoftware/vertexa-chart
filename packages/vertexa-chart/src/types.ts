@@ -316,7 +316,70 @@ export type HeatmapTrace = TraceBase & {
   };
 };
 
-export type Trace = ScatterTrace | BarTrace | AreaTrace | HeatmapTrace;
+export type HistogramBins = {
+  /** Left edge of the first bin. Defaults to min(data). */
+  start?: number;
+  /** Right edge of the last bin. Defaults to max(data). */
+  end?: number;
+  /** Fixed bin width. When provided, nbinsx/nbinsy is ignored. */
+  size?: number;
+};
+
+export type HistogramTrace = {
+  type: "histogram";
+  id?: string;
+  name?: string;
+  visible?: Visible;
+  hovertemplate?: string;
+
+  /** Raw data values. For orientation "v" (default): values to bin along the x-axis. */
+  x?: ArrayLike<Datum>;
+  /** Raw data values. For orientation "h": values to bin along the y-axis. */
+  y?: ArrayLike<Datum>;
+
+  /**
+   * "v" — vertical bars, bins along x (default when x is provided).
+   * "h" — horizontal bars, bins along y (default when y is provided without x).
+   */
+  orientation?: "v" | "h";
+
+  /** Target number of x-direction bins (auto-binning via Sturges rule when omitted). */
+  nbinsx?: number;
+  /** Target number of y-direction bins. */
+  nbinsy?: number;
+  /** Manual x-bin specification. size overrides nbinsx. */
+  xbins?: HistogramBins;
+  /** Manual y-bin specification. size overrides nbinsy. */
+  ybins?: HistogramBins;
+
+  /**
+   * Normalisation applied to bin heights after histfunc aggregation.
+   * ""                   — raw counts / sums (default)
+   * "percent"            — percentage of total
+   * "probability"        — fraction of total (sums to 1)
+   * "density"            — count / (total × binSize)
+   * "probability density"— same as "density"
+   */
+  histnorm?: "" | "percent" | "probability" | "density" | "probability density";
+
+  /**
+   * Aggregation function applied to values inside each bin.
+   * "count" — number of points (default, ignores y/x weights)
+   * "sum"   — sum of the weight dimension
+   * "avg"   — average of the weight dimension
+   */
+  histfunc?: "count" | "sum" | "avg";
+
+  marker?: { color?: string; opacity?: number };
+  bar?: {
+    /** Visual bar width in CSS pixels. Defaults to bin width derived from data. */
+    widthPx?: number;
+    color?: string;
+    opacity?: number;
+  };
+};
+
+export type Trace = ScatterTrace | BarTrace | AreaTrace | HeatmapTrace | HistogramTrace;
 
 export type ChartPoint = {
   traceIndex: number;

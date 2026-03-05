@@ -520,7 +520,7 @@ export function sortedOrder(values: Float64Array): Uint32Array {
  * Otherwise, categories are collected in first-seen order across visible traces.
  */
 export function buildCategoryOrder(
-  traces: ReadonlyArray<{ x: ArrayLike<unknown>; y: ArrayLike<unknown>; visible?: Visible }>,
+  traces: ReadonlyArray<{ x?: ArrayLike<unknown>; y?: ArrayLike<unknown>; visible?: Visible }>,
   which: "x" | "y",
   explicit?: string[]
 ): string[] {
@@ -530,6 +530,7 @@ export function buildCategoryOrder(
   for (const t of traces) {
     if (t.visible === false) continue;
     const arr = which === "x" ? t.x : t.y;
+    if (!arr) continue; // optional x/y (e.g. HistogramTrace)
     for (let i = 0; i < arr.length; i++) {
       const v = String(arr[i]);
       if (!seen.has(v)) { seen.add(v); order.push(v); }

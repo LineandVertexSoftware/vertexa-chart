@@ -26,6 +26,8 @@ export type {
   BarTrace,
   AreaTrace,
   HeatmapTrace,
+  HistogramTrace,
+  HistogramBins,
   Annotation,
   AnnotationLine,
   AnnotationRegion,

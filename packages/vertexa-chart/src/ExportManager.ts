@@ -151,6 +151,25 @@ export class ExportManager {
         continue;
       }
 
+      // For histograms, export raw input data (x and/or y arrays).
+      if (trace.type === "histogram") {
+        const hxs = trace.x ? Array.from(trace.x) : [];
+        const hys = trace.y ? Array.from(trace.y) : [];
+        const hn = Math.max(hxs.length, hys.length);
+        for (let pointIndex = 0; pointIndex < hn; pointIndex++) {
+          rows.push(toCsvRow([
+            String(traceIndex),
+            traceName,
+            trace.type,
+            String(pointIndex),
+            pointIndex < hxs.length ? fmtDatum(hxs[pointIndex]) : "",
+            pointIndex < hys.length ? fmtDatum(hys[pointIndex]) : "",
+            ""
+          ]));
+        }
+        continue;
+      }
+
       const xs = Array.from(trace.x);
       const ys = Array.from(trace.y);
       const n = Math.min(xs.length, ys.length);

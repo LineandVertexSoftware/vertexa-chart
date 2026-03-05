@@ -56,7 +56,9 @@ export class PickingEngine {
     // Rebuild if the CPU cache was invalidated by a fast-path append
     if (this.sceneCompiler.markerNormByTraceDirty.has(traceIndex)) {
       const trace = traces[traceIndex];
-      if (trace) {
+      // Histograms store bin centres in markerNormByTrace (not raw x/y).
+      // Fast-path append is not supported for histograms; skip the rebuild.
+      if (trace && trace.type !== "histogram" && trace.x && trace.y) {
         const xType = this.axisManager.resolveAxisType("x");
         const yType = this.axisManager.resolveAxisType("y");
         const rebuilt = normalizeInterleaved(

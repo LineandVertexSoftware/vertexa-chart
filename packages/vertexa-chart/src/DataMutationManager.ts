@@ -87,6 +87,8 @@ export class DataMutationManager {
       if (hasLines && lineLayerIdxs && lineLayerIdxs.length > 0) {
         // Build new segments: junction (last-old → first-new) + segments within new points
         // After mutation, trace.x[length - nNew - 1] is the last OLD point in the window
+        // (histogram traces are never passed here; Chart.appendPoints throws for them)
+        if (!trace.x || !trace.y) continue;
         const lastOldIdx = trace.x.length - nNew - 1;
         const newSegments = this.buildFastAppendSegments(
           lastOldIdx >= 0 ? trace.x[lastOldIdx] : null,
@@ -106,7 +108,7 @@ export class DataMutationManager {
 
       // Update idRanges count for this trace
       const idRange = this.sceneCompiler.idRanges.find(r => r.traceIndex === traceIndex);
-      if (idRange) {
+      if (idRange && trace.x && trace.y) {
         idRange.count = Math.min(trace.x.length, trace.y.length);
       }
     }

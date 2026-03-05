@@ -34,6 +34,7 @@ export function computeAxisDomain(
     if (vis === false) continue;
 
     const arr = which === "x" ? t.x : t.y;
+    if (!arr) continue; // optional x/y (e.g. HistogramTrace)
     const n = arr.length;
     for (let i = 0; i < n; i++) {
       const v = toNumber(arr[i], type);
@@ -261,6 +262,9 @@ export function getTraceColor(trace: Trace, traceIndex: number, palette: string[
   if (trace.type === "area") {
     return trace.area?.color ?? trace.line?.color ?? trace.marker?.color ?? paletteColor(traceIndex, palette);
   }
+  if (trace.type === "histogram") {
+    return trace.bar?.color ?? trace.marker?.color ?? paletteColor(traceIndex, palette);
+  }
   return trace.marker?.color ?? trace.line?.color ?? paletteColor(traceIndex, palette);
 }
 
@@ -274,6 +278,9 @@ export function getTraceHoverSizePx(
   }
   if (trace.type === "heatmap") {
     return heatmapHoverSizeByTrace.get(traceIndex) ?? 10;
+  }
+  if (trace.type === "histogram") {
+    return Math.max(8, (trace.bar?.widthPx ?? DEFAULT_BAR_WIDTH_PX) + 2);
   }
   if (trace.type === "area") {
     return (trace.marker?.sizePx ?? 2) + 5;
@@ -292,6 +299,15 @@ export function normalizeScalarY(yv: number, yType: AxisType, yDom: DomainNum): 
   const ly1 = yType === "log" ? Math.log10(y1) : y1;
   const invY = 1 / (ly1 - ly0);
   return Number.isFinite(lv) ? 1 - ((lv - ly0) * invY) : Number.NaN;
+}
+
+export function normalizeScalarX(xv: number, xType: AxisType, xDom: DomainNum): number {
+  const lv = xType === "log" ? (xv > 0 ? Math.log10(xv) : Number.NaN) : xv;
+  const [x0, x1] = xDom;
+  const lx0 = xType === "log" ? Math.log10(x0) : x0;
+  const lx1 = xType === "log" ? Math.log10(x1) : x1;
+  const invX = 1 / (lx1 - lx0);
+  return Number.isFinite(lv) ? (lv - lx0) * invX : Number.NaN;
 }
 
 export function normalizeBarBaseY(trace: BarTrace, yType: AxisType, yDom: DomainNum): number {
