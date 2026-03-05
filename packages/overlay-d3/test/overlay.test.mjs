@@ -16,8 +16,14 @@ const SVGSVGElement = jsWindow.SVGSVGElement;
 globalThis.SVGElement = SVGElement;
 globalThis.SVGSVGElement = SVGSVGElement;
 
-// d3-zoom's defaultTouchable() reads navigator.maxTouchPoints at construction time
-globalThis.navigator = jsWindow.navigator;
+// d3-zoom's defaultTouchable() reads navigator.maxTouchPoints at construction time.
+// Node ≥21 exposes navigator as a getter-only property, so use defineProperty to
+// override it (works on Node 20 too, where navigator wasn't defined at all).
+Object.defineProperty(globalThis, "navigator", {
+  value: jsWindow.navigator,
+  writable: true,
+  configurable: true,
+});
 
 test("OverlayD3", async (t) => {
   const { OverlayD3 } = await import("../dist/index.js");
