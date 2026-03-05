@@ -19,9 +19,17 @@
   "scripts": {
     "build": "tsc && node scripts/copy-shaders.js",
     "dev": "tsc --watch",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "test": "pnpm build && c8 node --experimental-test-module-mocks --loader ./test/wgsl-loader.mjs --test test/*.test.mjs",
+    "coverage": "c8 report --reporter=html",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo coverage",
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
+  },
+  "c8": {
+    "all": true,
+    "src": "src",
+    "include": ["src/**/*.ts"],
+    "reporter": ["text", "html", "lcov"]
   },
   "devDependencies": {
     "@webgpu/types": "^0.1.68",

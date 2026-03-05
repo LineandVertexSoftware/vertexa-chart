@@ -212,6 +212,8 @@ export type Annotation = AnnotationLine | AnnotationRegion | AnnotationLabel;
 
 export type HoverMode = "closest" | "x" | "y" | "none";
 
+export type BarMode = "group" | "stack" | "overlay";
+
 export type LegendLayout = {
   show?: boolean;
   position?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
@@ -233,6 +235,7 @@ export type Layout = {
     y?: Axis;
   };
   hovermode?: HoverMode;
+  barmode?: BarMode;
   grid?: GridConfig;
   annotations?: Annotation[];
   legend?: LegendLayout;

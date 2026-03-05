@@ -123,6 +123,7 @@ function mockAxisManager(overrides = {}) {
   return {
     resolveAxisType: () => "linear",
     getAxis: () => undefined,
+    getBarMode: () => "overlay",
     getHoverMode: () => "closest",
     ...overrides
   };

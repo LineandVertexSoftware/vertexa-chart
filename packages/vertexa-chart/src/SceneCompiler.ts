@@ -29,8 +29,11 @@ import {
   smoothLinePoints,
   getTraceColor,
   normalizeBarBaseY,
+  normalizeScalarY,
   normalizeAreaBaseY,
-  computeAreaFillWidthPx
+  computeAreaFillWidthPx,
+  computeStackedYDomain,
+  type BarStackEntry
 } from "./scene.js";
 import type { AxisManager } from "./AxisManager.js";
 
@@ -129,6 +132,15 @@ export class SceneCompiler {
     this.xDomainNum = computeAxisDomain(traces, "x", axisManager.getAxis("x"), xType, this.xCategories ?? undefined);
     this.yDomainNum = computeAxisDomain(traces, "y", axisManager.getAxis("y"), yType, this.yCategories ?? undefined);
 
+    // barmode layout
+    const barmode = axisManager.getBarMode();
+    const plotWidth = Math.max(1, width - padding.l - padding.r);
+    const barGroupInfo = barmode === "group" ? computeBarGroupInfo(traces) : null;
+    const barStackData = barmode === "stack" ? computeBarStackData(traces, xType, yType) : null;
+    if (barmode === "stack" && barStackData && barStackData.size > 0) {
+      this.yDomainNum = computeStackedYDomain(barStackData, axisManager.getAxis("y"), yType);
+    }
+
     // clear caches
     this.markerNormByTrace.clear();
     this.markerNormLayers = [];
@@ -156,28 +168,74 @@ export class SceneCompiler {
         if (count <= 0) return;
 
         const widthPx = Math.max(1, trace.bar?.widthPx ?? DEFAULT_BAR_WIDTH_PX);
+
+        // --- group: compute x offset in normalized space ---
+        let xOffsetNorm = 0;
+        if (barmode === "group" && barGroupInfo) {
+          const info = barGroupInfo.get(traceIndex);
+          if (info && info.totalGroups > 1) {
+            const gap = 2; // px between adjacent grouped bars
+            const offsetPx = (info.groupIndex - (info.totalGroups - 1) / 2) * (widthPx + gap);
+            xOffsetNorm = offsetPx / plotWidth;
+          }
+        }
+
+        // --- stack: retrieve per-point base/top in data units ---
+        const stackEntries = barmode === "stack" ? (barStackData?.get(traceIndex) ?? null) : null;
+
+        // Build adjusted marker points (shifted x for group; stacked top y for stack).
+        let markerPoints01 = points01;
+        if (xOffsetNorm !== 0 || stackEntries) {
+          const adj = new Float32Array(count * 2);
+          for (let i = 0; i < count; i++) {
+            adj[i * 2] = points01[i * 2] + xOffsetNorm;
+            if (stackEntries) {
+              const e = stackEntries[i];
+              adj[i * 2 + 1] = e ? normalizeScalarY(e.top, yType, this.yDomainNum) : points01[i * 2 + 1];
+            } else {
+              adj[i * 2 + 1] = points01[i * 2 + 1];
+            }
+          }
+          markerPoints01 = adj;
+        }
+
         const baseId = nextBaseId;
         nextBaseId += count;
 
         this.idRanges.push({ baseId, count, traceIndex });
-        this.markerNormByTrace.set(traceIndex, points01);
-        this.markerNormLayers.push({ traceIndex, points01 });
+        this.markerNormByTrace.set(traceIndex, markerPoints01);
+        this.markerNormLayers.push({ traceIndex, points01: markerPoints01 });
 
         markers.push({
-          points01,
+          points01: markerPoints01,
           // Keep pick/hover support for bars without rendering marker sprites.
           pointSizePx: Math.max(2, widthPx),
           rgba: [0, 0, 0, 0],
           baseId
         });
 
-        const baseYn = normalizeBarBaseY(trace, yType, this.yDomainNum);
+        // Build bar line segments with group offset and/or stack bases applied.
+        const defaultBaseYn = normalizeBarBaseY(trace, yType, this.yDomainNum);
         const barPoints: number[] = [];
         for (let i = 0; i < count; i++) {
-          const xn = points01[i * 2 + 0];
-          const yn = points01[i * 2 + 1];
-          if (Number.isFinite(xn) && Number.isFinite(yn) && Number.isFinite(baseYn)) {
-            barPoints.push(xn, baseYn, xn, yn, Number.NaN, Number.NaN);
+          const xn = points01[i * 2] + xOffsetNorm;
+          let baseYn: number;
+          let topYn: number;
+          if (stackEntries) {
+            const e = stackEntries[i];
+            if (e) {
+              baseYn = normalizeScalarY(e.base, yType, this.yDomainNum);
+              topYn = normalizeScalarY(e.top, yType, this.yDomainNum);
+            } else {
+              baseYn = defaultBaseYn;
+              topYn = points01[i * 2 + 1];
+            }
+          } else {
+            baseYn = defaultBaseYn;
+            topYn = points01[i * 2 + 1];
+          }
+          if (Number.isFinite(xn) && Number.isFinite(topYn) && Number.isFinite(baseYn)) {
+            barPoints.push(xn, baseYn, xn, topYn, Number.NaN, Number.NaN);
           } else {
             barPoints.push(Number.NaN, Number.NaN);
           }
@@ -402,6 +460,60 @@ export class SceneCompiler {
 
     return { markers, lines };
   }
+}
+
+// ----------------------------
+// Bar layout helpers
+// ----------------------------
+
+type BarGroupInfo = { groupIndex: number; totalGroups: number };
+
+function computeBarGroupInfo(traces: Trace[]): Map<number, BarGroupInfo> {
+  const result = new Map<number, BarGroupInfo>();
+  let idx = 0;
+  for (let i = 0; i < traces.length; i++) {
+    const t = traces[i];
+    if (t.type !== "bar" || (t.visible ?? true) !== true) continue;
+    result.set(i, { groupIndex: idx++, totalGroups: 0 });
+  }
+  for (const v of result.values()) v.totalGroups = idx;
+  return result;
+}
+
+function computeBarStackData(traces: Trace[], xType: AxisType, yType: AxisType): Map<number, BarStackEntry[]> {
+  const result = new Map<number, BarStackEntry[]>();
+  const posRunning = new Map<string, number>(); // xKey → current positive top
+  const negRunning = new Map<string, number>(); // xKey → current negative bottom
+
+  for (let ti = 0; ti < traces.length; ti++) {
+    const t = traces[ti];
+    if (t.type !== "bar" || (t.visible ?? true) !== true) continue;
+
+    const n = Math.min(t.x.length, t.y.length);
+    const entries: BarStackEntry[] = new Array(n);
+
+    for (let i = 0; i < n; i++) {
+      const xKey = xType === "category"
+        ? String(t.x[i])
+        : String(toNumber(t.x[i] as Datum, xType));
+      const yv = toNumber(t.y[i] as Datum, yType);
+
+      if (!Number.isFinite(yv) || yv >= 0) {
+        const base = posRunning.get(xKey) ?? 0;
+        const top = base + (Number.isFinite(yv) ? yv : 0);
+        entries[i] = { base, top };
+        if (Number.isFinite(yv)) posRunning.set(xKey, top);
+      } else {
+        const currentBottom = negRunning.get(xKey) ?? 0;
+        const newBottom = currentBottom + yv;
+        entries[i] = { base: newBottom, top: currentBottom };
+        negRunning.set(xKey, newBottom);
+      }
+    }
+
+    result.set(ti, entries);
+  }
+  return result;
 }
 
 function validateCategoryConsistency(traces: Trace[], xType: AxisType, yType: AxisType): void {

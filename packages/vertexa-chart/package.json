@@ -19,16 +19,30 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "pnpm build && node --experimental-test-module-mocks --test test/*.test.mjs",
-    "clean": "rm -rf dist tsconfig.tsbuildinfo",
+    "test": "pnpm build && c8 node --experimental-test-module-mocks --test test/*.test.mjs",
+    "coverage": "c8 report --reporter=html",
+    "clean": "rm -rf dist tsconfig.tsbuildinfo coverage",
     "prepublishOnly": "pnpm build",
     "typecheck": "tsc --noEmit"
+  },
+  "c8": {
+    "all": true,
+    "src": "src",
+    "include": [
+      "src/**/*.ts"
+    ],
+    "reporter": [
+      "text",
+      "html",
+      "lcov"
+    ]
   },
   "dependencies": {
     "@lineandvertexsoftware/overlay-d3": "workspace:*",
     "@lineandvertexsoftware/renderer-webgpu": "workspace:*"
   },
   "devDependencies": {
+    "jsdom": "^28.1.0",
     "typescript": "^5.6.3"
   },
   "sideEffects": false,

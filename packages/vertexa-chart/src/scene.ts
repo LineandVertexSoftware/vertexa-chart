@@ -285,16 +285,49 @@ export function getTraceHoverSizePx(
 // Bar / area base normalization
 // ----------------------------
 
-export function normalizeBarBaseY(trace: BarTrace, yType: AxisType, yDom: DomainNum): number {
-  const defaultBase = yType === "log" ? yDom[0] : 0;
-  let yv = toNumber(trace.bar?.base ?? defaultBase, yType);
-  if (yType === "log") yv = yv > 0 ? Math.log10(yv) : Number.NaN;
-
+export function normalizeScalarY(yv: number, yType: AxisType, yDom: DomainNum): number {
+  const lv = yType === "log" ? (yv > 0 ? Math.log10(yv) : Number.NaN) : yv;
   const [y0, y1] = yDom;
   const ly0 = yType === "log" ? Math.log10(y0) : y0;
   const ly1 = yType === "log" ? Math.log10(y1) : y1;
   const invY = 1 / (ly1 - ly0);
-  return Number.isFinite(yv) ? 1 - ((yv - ly0) * invY) : Number.NaN;
+  return Number.isFinite(lv) ? 1 - ((lv - ly0) * invY) : Number.NaN;
+}
+
+export function normalizeBarBaseY(trace: BarTrace, yType: AxisType, yDom: DomainNum): number {
+  const defaultBase = yType === "log" ? yDom[0] : 0;
+  const yv = toNumber(trace.bar?.base ?? defaultBase, yType);
+  return normalizeScalarY(yv, yType, yDom);
+}
+
+// ----------------------------
+// Bar stacking
+// ----------------------------
+
+export type BarStackEntry = { base: number; top: number };
+
+/**
+ * Compute stacked y-domain from pre-computed stack entries.
+ * Always includes 0 as a boundary (Plotly convention).
+ */
+export function computeStackedYDomain(
+  stackData: Map<number, BarStackEntry[]>,
+  axis: Axis | undefined,
+  yType: AxisType
+): DomainNum {
+  let min = 0;
+  let max = 0;
+  for (const entries of stackData.values()) {
+    for (const e of entries) {
+      if (e.base < min) min = e.base;
+      if (e.top > max) max = e.top;
+      if (e.top < min) min = e.top;
+      if (e.base > max) max = e.base;
+    }
+  }
+  if (min === max) return applyAxisBounds([min - 0.5, max + 0.5], axis, yType);
+  const pad = (max - min) * 0.02;
+  return applyAxisBounds([min - pad, max + pad], axis, yType);
 }
 
 export function normalizeAreaBaseY(trace: AreaTrace, yType: AxisType, yDom: DomainNum): number {

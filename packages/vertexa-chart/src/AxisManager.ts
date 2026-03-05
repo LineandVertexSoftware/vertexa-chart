@@ -3,7 +3,7 @@ import type {
   AxisSpec,
   GridStyle
 } from "@lineandvertexsoftware/overlay-d3";
-import type { Axis, AxisType, HoverMode, Layout, Trace } from "./types.js";
+import type { Axis, AxisType, BarMode, HoverMode, Layout, Trace } from "./types.js";
 import {
   type DomainNum,
   type Padding,
@@ -84,6 +84,10 @@ export class AxisManager {
       fromNormalizedDomain(n0, domain, type),
       fromNormalizedDomain(n1, domain, type)
     ];
+  }
+
+  getBarMode(): BarMode {
+    return this.getState().layout.barmode ?? "overlay";
   }
 
   getHoverMode(): HoverMode {

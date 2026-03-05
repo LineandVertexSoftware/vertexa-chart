@@ -22,5 +22,9 @@
     "version:patch": "pnpm -r --filter './packages/**' exec pnpm version patch",
     "version:minor": "pnpm -r --filter './packages/**' exec pnpm version minor",
     "version:major": "pnpm -r --filter './packages/**' exec pnpm version major"
+  },
+  "devDependencies": {
+    "c8": "^11.0.0",
+    "jsdom": "^28.1.0"
   }
 }
