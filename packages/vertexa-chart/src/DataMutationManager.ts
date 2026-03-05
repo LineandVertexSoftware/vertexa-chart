@@ -45,6 +45,9 @@ export class DataMutationManager {
     const xType = this.axisManager.resolveAxisType("x");
     const yType = this.axisManager.resolveAxisType("y");
 
+    // Gate 1b: fast path is not supported for category axes
+    if (xType === "category" || yType === "category") return false;
+
     // Gate 2: domain must not change (new points within current domain, or domain is overridden)
     const newXDomain = computeAxisDomain(traces, "x", this.axisManager.getAxis("x"), xType);
     const newYDomain = computeAxisDomain(traces, "y", this.axisManager.getAxis("y"), yType);

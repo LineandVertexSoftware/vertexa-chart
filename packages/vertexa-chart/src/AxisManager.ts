@@ -98,6 +98,16 @@ export class AxisManager {
     const axis = this.getAxis(which);
     if (axis?.type) return axis.type;
 
+    // Infer category axes from string-valued data.
+    for (const trace of traces) {
+      const arr = which === "x" ? trace.x : trace.y;
+      if (arr.length === 0) continue;
+      const probe = Math.min(arr.length, 8);
+      for (let i = 0; i < probe; i++) {
+        if (typeof arr[i] === "string") return "category";
+      }
+    }
+
     // Infer time axes from Date-valued data when no explicit type is provided.
     for (const trace of traces) {
       const arr = which === "x" ? trace.x : trace.y;
@@ -119,9 +129,24 @@ export class AxisManager {
     return "linear";
   }
 
-  makeOverlayAxisSpec(which: "x" | "y", type: AxisType, domain: DomainNum): AxisSpec {
+  makeOverlayAxisSpec(which: "x" | "y", type: AxisType, domain: DomainNum, categories?: string[]): AxisSpec {
     const { theme } = this.getState();
     const axis = this.getAxis(which);
+
+    if (type === "category" && categories && categories.length > 0) {
+      return {
+        type: "category",
+        domain,
+        title: axis?.title,
+        tickValues: categories.map((_, i) => i),
+        categories,
+        style: {
+          fontFamily: theme.axis.fontFamily,
+          fontSizePx: theme.axis.fontSizePx
+        }
+      };
+    }
+
     const tickValues = axis?.tickValues?.map((v) => toAxisDatum(v, type));
     return {
       type,

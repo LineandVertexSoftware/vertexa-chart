@@ -8,7 +8,7 @@ export type LegendItem = {
   visible: boolean;
 };
 
-export type AxisType = "linear" | "log" | "time";
+export type AxisType = "linear" | "log" | "time" | "category";
 
 export type AxisStyle = {
   fontFamily?: string;
@@ -17,13 +17,15 @@ export type AxisStyle = {
 
 export type AxisSpec = {
   type: AxisType;
-  domain: [number, number]; // numeric domain; time uses ms
+  domain: [number, number]; // numeric domain; time uses ms; category uses [-0.5, N-0.5]
   title?: string;
   tickValues?: Array<number | Date>;
   tickFormat?: string;
   precision?: number;
   timeFormat?: string;
   style?: AxisStyle;
+  /** Ordered category labels — required when type is "category". */
+  categories?: string[];
 };
 
 export type HoverEvent = {
@@ -769,17 +771,30 @@ export class OverlayD3 {
       .tickSize(yTickSize)
       .tickSizeOuter(0);
 
-    if (this.opts.xAxis.tickValues && this.opts.xAxis.tickValues.length > 0) {
-      xAxis.tickValues(this.opts.xAxis.tickValues);
-    }
-    if (this.opts.yAxis.tickValues && this.opts.yAxis.tickValues.length > 0) {
-      yAxis.tickValues(this.opts.yAxis.tickValues);
+    // Category axes: pin ticks at integer indices and label with category strings.
+    if (this.opts.xAxis.type === "category" && this.opts.xAxis.categories?.length) {
+      const cats = this.opts.xAxis.categories;
+      xAxis.tickValues(cats.map((_, i) => i));
+      xAxis.tickFormat((d) => cats[Math.round(Number(d))] ?? String(d));
+    } else {
+      if (this.opts.xAxis.tickValues && this.opts.xAxis.tickValues.length > 0) {
+        xAxis.tickValues(this.opts.xAxis.tickValues);
+      }
+      const xTickFormatter = makeTickFormatter(this.opts.xAxis);
+      if (xTickFormatter) xAxis.tickFormat(xTickFormatter);
     }
 
-    const xTickFormatter = makeTickFormatter(this.opts.xAxis);
-    const yTickFormatter = makeTickFormatter(this.opts.yAxis);
-    if (xTickFormatter) xAxis.tickFormat(xTickFormatter);
-    if (yTickFormatter) yAxis.tickFormat(yTickFormatter);
+    if (this.opts.yAxis.type === "category" && this.opts.yAxis.categories?.length) {
+      const cats = this.opts.yAxis.categories;
+      yAxis.tickValues(cats.map((_, i) => i));
+      yAxis.tickFormat((d) => cats[Math.round(Number(d))] ?? String(d));
+    } else {
+      if (this.opts.yAxis.tickValues && this.opts.yAxis.tickValues.length > 0) {
+        yAxis.tickValues(this.opts.yAxis.tickValues);
+      }
+      const yTickFormatter = makeTickFormatter(this.opts.yAxis);
+      if (yTickFormatter) yAxis.tickFormat(yTickFormatter);
+    }
 
     // Axis<number|Date> is callable on SVGGElement selections; bridge via unknown
     // because D3's Selection.call generic doesn't unify PElement=null with any.
@@ -814,12 +829,16 @@ export class OverlayD3 {
       return;
     }
 
-    const xTicks = (this.opts.xAxis.tickValues && this.opts.xAxis.tickValues.length > 0
-      ? this.opts.xAxis.tickValues
-      : getTickValues(zx, xTickCount)).filter((d) => Number.isFinite(Number(zx(d))));
-    const yTicks = (this.opts.yAxis.tickValues && this.opts.yAxis.tickValues.length > 0
-      ? this.opts.yAxis.tickValues
-      : getTickValues(zy, yTickCount)).filter((d) => Number.isFinite(Number(zy(d))));
+    const xTicks = (this.opts.xAxis.type === "category" && this.opts.xAxis.categories?.length
+      ? this.opts.xAxis.categories.map((_, i) => i)
+      : this.opts.xAxis.tickValues && this.opts.xAxis.tickValues.length > 0
+        ? this.opts.xAxis.tickValues
+        : getTickValues(zx, xTickCount)).filter((d) => Number.isFinite(Number(zx(d))));
+    const yTicks = (this.opts.yAxis.type === "category" && this.opts.yAxis.categories?.length
+      ? this.opts.yAxis.categories.map((_, i) => i)
+      : this.opts.yAxis.tickValues && this.opts.yAxis.tickValues.length > 0
+        ? this.opts.yAxis.tickValues
+        : getTickValues(zy, yTickCount)).filter((d) => Number.isFinite(Number(zy(d))));
 
     this.gGridRoot
       .selectAll<SVGLineElement, number | Date>("line.grid-x")

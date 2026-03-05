@@ -265,8 +265,8 @@ export class Chart implements ChartPublicApi {
       width: this.width,
       height: this.height,
       padding: this.padding,
-      xAxis: this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum),
-      yAxis: this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum),
+      xAxis: this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
+      yAxis: this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined),
       grid: this.axisManager.resolveOverlayGrid(),
       annotations: this.axisManager.makeOverlayAnnotations(xType, yType),
       onZoom: (z) => {
@@ -309,8 +309,8 @@ export class Chart implements ChartPublicApi {
     const xType = this.axisManager.resolveAxisType("x");
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
-      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum)
+      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
@@ -390,8 +390,8 @@ export class Chart implements ChartPublicApi {
     const xType = this.axisManager.resolveAxisType("x");
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
-      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum)
+      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
@@ -448,8 +448,8 @@ export class Chart implements ChartPublicApi {
     const xType = this.axisManager.resolveAxisType("x");
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
-      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum)
+      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
@@ -535,8 +535,8 @@ export class Chart implements ChartPublicApi {
     const xType = this.axisManager.resolveAxisType("x");
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
-      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum)
+      this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));

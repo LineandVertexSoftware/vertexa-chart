@@ -11,8 +11,14 @@ export function computeAxisDomain(
   traces: Trace[],
   which: "x" | "y",
   axis: Axis | undefined,
-  type: AxisType
+  type: AxisType,
+  categories?: string[]
 ): DomainNum {
+  if (type === "category") {
+    const n = (categories ?? []).length;
+    return n === 0 ? [-0.5, 0.5] : [-0.5, n - 0.5];
+  }
+
   if (axis?.domain) {
     return [toNumber(axis.domain[0], type), toNumber(axis.domain[1], type)];
   }
@@ -115,7 +121,9 @@ export function normalizeInterleaved(
   xType: AxisType,
   yType: AxisType,
   xDom: DomainNum,
-  yDom: DomainNum
+  yDom: DomainNum,
+  xCatMap?: Map<string, number>,
+  yCatMap?: Map<string, number>
 ): Float32Array {
   const n = Math.min(xs.length, ys.length);
   const out = new Float32Array(n * 2);
@@ -123,6 +131,7 @@ export function normalizeInterleaved(
   const [x0, x1] = xDom;
   const [y0, y1] = yDom;
 
+  // For category axes the domain is already in index space (linear); log is never applied.
   const lx0 = xType === "log" ? Math.log10(x0) : x0;
   const lx1 = xType === "log" ? Math.log10(x1) : x1;
   const ly0 = yType === "log" ? Math.log10(y0) : y0;
@@ -132,11 +141,21 @@ export function normalizeInterleaved(
   const invY = 1 / (ly1 - ly0);
 
   for (let i = 0; i < n; i++) {
-    let xv = toNumber(xs[i] as Parameters<typeof toNumber>[0], xType);
-    let yv = toNumber(ys[i] as Parameters<typeof toNumber>[0], yType);
+    let xv: number;
+    if (xType === "category") {
+      xv = xCatMap?.get(String(xs[i])) ?? NaN;
+    } else {
+      xv = toNumber(xs[i] as Parameters<typeof toNumber>[0], xType);
+      if (xType === "log") xv = xv > 0 ? Math.log10(xv) : NaN;
+    }
 
-    if (xType === "log") xv = xv > 0 ? Math.log10(xv) : NaN;
-    if (yType === "log") yv = yv > 0 ? Math.log10(yv) : NaN;
+    let yv: number;
+    if (yType === "category") {
+      yv = yCatMap?.get(String(ys[i])) ?? NaN;
+    } else {
+      yv = toNumber(ys[i] as Parameters<typeof toNumber>[0], yType);
+      if (yType === "log") yv = yv > 0 ? Math.log10(yv) : NaN;
+    }
 
     const xn = Number.isFinite(xv) ? (xv - lx0) * invX : NaN;
     // Overlay y-axis uses range [plotH, 0], so flip normalized y for renderer parity.

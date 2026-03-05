@@ -10,7 +10,8 @@ import type {
   ChartToolbarOptions,
   ChartToolbarPosition,
   ChartToolbarExportFormat,
-  Datum
+  Datum,
+  Visible
 } from "./types.js";
 
 export type DomainNum = [number, number];
@@ -507,6 +508,41 @@ export function sortedOrder(values: Float64Array): Uint32Array {
   const out = new Uint32Array(n);
   for (let i = 0; i < n; i++) out[i] = arr[i];
   return out;
+}
+
+// ----------------------------
+// Category axis helpers
+// ----------------------------
+
+/**
+ * Build a stable, ordered list of unique category strings from trace data.
+ * If `explicit` is provided and non-empty, it is returned as-is.
+ * Otherwise, categories are collected in first-seen order across visible traces.
+ */
+export function buildCategoryOrder(
+  traces: ReadonlyArray<{ x: ArrayLike<unknown>; y: ArrayLike<unknown>; visible?: Visible }>,
+  which: "x" | "y",
+  explicit?: string[]
+): string[] {
+  if (explicit && explicit.length > 0) return explicit.slice();
+  const seen = new Set<string>();
+  const order: string[] = [];
+  for (const t of traces) {
+    if (t.visible === false) continue;
+    const arr = which === "x" ? t.x : t.y;
+    for (let i = 0; i < arr.length; i++) {
+      const v = String(arr[i]);
+      if (!seen.has(v)) { seen.add(v); order.push(v); }
+    }
+  }
+  return order;
+}
+
+/** Build a string→integer-index map from an ordered category list. */
+export function makeCategoryMap(categories: string[]): Map<string, number> {
+  const m = new Map<string, number>();
+  for (let i = 0; i < categories.length; i++) m.set(categories[i], i);
+  return m;
 }
 
 export function pointInPolygon(x: number, y: number, polygon: Array<{ x: number; y: number }>): boolean {

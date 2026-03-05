@@ -1,4 +1,4 @@
-import type { Datum, LineSmoothingMode, Trace } from "./types.js";
+import type { AxisType, Datum, LineSmoothingMode, Trace } from "./types.js";
 import type { WebGPURenderer } from "@lineandvertexsoftware/renderer-webgpu";
 import {
   type DomainNum,
@@ -10,7 +10,9 @@ import {
   clamp01,
   parseColor,
   toNumber,
-  sortedOrder
+  sortedOrder,
+  buildCategoryOrder,
+  makeCategoryMap
 } from "./chart-utils.js";
 import {
   toHeatmapRows,
@@ -49,6 +51,10 @@ export class SceneCompiler {
   ySorted: { traceIndex: number; order: Uint32Array; ysNum: Float64Array }[] = [];
   xDomainNum: DomainNum = [0, 1];
   yDomainNum: DomainNum = [0, 1];
+  xCategories: string[] | null = null;
+  yCategories: string[] | null = null;
+  private xCatMap: Map<string, number> = new Map();
+  private yCatMap: Map<string, number> = new Map();
 
   compile(
     traces: Trace[],
@@ -62,6 +68,21 @@ export class SceneCompiler {
 
     const xType = axisManager.resolveAxisType("x");
     const yType = axisManager.resolveAxisType("y");
+
+    // Build category orders and maps (empty for non-category axes).
+    this.xCategories = null;
+    this.yCategories = null;
+    this.xCatMap = new Map();
+    this.yCatMap = new Map();
+    if (xType === "category") {
+      this.xCategories = buildCategoryOrder(traces, "x", axisManager.getAxis("x")?.categories);
+      this.xCatMap = makeCategoryMap(this.xCategories);
+    }
+    if (yType === "category") {
+      this.yCategories = buildCategoryOrder(traces, "y", axisManager.getAxis("y")?.categories);
+      this.yCatMap = makeCategoryMap(this.yCategories);
+    }
+    validateCategoryConsistency(traces, xType, yType);
 
     // Cache raw trace data by source trace index to keep ID->trace mapping stable.
     this.traceData = new Array(traces.length).fill(null);
@@ -105,8 +126,8 @@ export class SceneCompiler {
     }
 
     // compute domains from traces (include legendonly by default to keep axes stable)
-    this.xDomainNum = computeAxisDomain(traces, "x", axisManager.getAxis("x"), xType);
-    this.yDomainNum = computeAxisDomain(traces, "y", axisManager.getAxis("y"), yType);
+    this.xDomainNum = computeAxisDomain(traces, "x", axisManager.getAxis("x"), xType, this.xCategories ?? undefined);
+    this.yDomainNum = computeAxisDomain(traces, "y", axisManager.getAxis("y"), yType, this.yCategories ?? undefined);
 
     // clear caches
     this.markerNormByTrace.clear();
@@ -130,7 +151,7 @@ export class SceneCompiler {
       if (!renderable) return;
 
       if (trace.type === "bar") {
-        const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum);
+        const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum, this.xCatMap, this.yCatMap);
         const count = points01.length / 2;
         if (count <= 0) return;
 
@@ -243,7 +264,7 @@ export class SceneCompiler {
       }
 
       if (trace.type === "area") {
-        const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum);
+        const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum, this.xCatMap, this.yCatMap);
         const count = points01.length / 2;
         if (count <= 0) return;
 
@@ -303,7 +324,7 @@ export class SceneCompiler {
       }
 
       const mode = trace.mode ?? "markers";
-      const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum);
+      const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum, this.xCatMap, this.yCatMap);
 
       const baseColor = getTraceColor(trace, traceIndex, theme.colors.palette);
 
@@ -364,8 +385,12 @@ export class SceneCompiler {
         const xsNum = new Float64Array(n);
         const ysNum = new Float64Array(n);
         for (let i = 0; i < n; i++) {
-          xsNum[i] = toNumber(td.xs[i], xType);
-          ysNum[i] = toNumber(td.ys[i], yType);
+          xsNum[i] = xType === "category"
+            ? (this.xCatMap.get(String(td.xs[i])) ?? NaN)
+            : toNumber(td.xs[i], xType);
+          ysNum[i] = yType === "category"
+            ? (this.yCatMap.get(String(td.ys[i])) ?? NaN)
+            : toNumber(td.ys[i], yType);
         }
 
         const orderX = sortedOrder(xsNum);
@@ -376,5 +401,32 @@ export class SceneCompiler {
     }
 
     return { markers, lines };
+  }
+}
+
+function validateCategoryConsistency(traces: Trace[], xType: AxisType, yType: AxisType): void {
+  for (const which of ["x", "y"] as const) {
+    const axisType = which === "x" ? xType : yType;
+    if (axisType !== "category") continue;
+
+    let hasStrings = false;
+    let hasNums = false;
+    for (let ti = 0; ti < traces.length; ti++) {
+      const t = traces[ti];
+      if (t.visible === false) continue;
+      const arr = which === "x" ? t.x : t.y;
+      for (let i = 0; i < arr.length; i++) {
+        const v = arr[i];
+        if (typeof v === "string") hasStrings = true;
+        else if (typeof v === "number" && !Number.isNaN(v)) hasNums = true;
+        if (hasStrings && hasNums) {
+          throw new Error(
+            `Category ${which}-axis: trace ${ti} mixes string and numeric values. ` +
+            `All ${which} values must be strings for a category axis. ` +
+            `Use axis.type "linear" or "time" if the data is numeric.`
+          );
+        }
+      }
+    }
   }
 }

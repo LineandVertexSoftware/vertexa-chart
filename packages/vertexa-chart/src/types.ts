@@ -1,6 +1,6 @@
-export type Datum = number | Date;
+export type Datum = number | Date | string;
 
-export type AxisType = "linear" | "log" | "time";
+export type AxisType = "linear" | "log" | "time" | "category";
 
 export type Axis = {
   type?: AxisType;           // default linear
@@ -14,6 +14,7 @@ export type Axis = {
   tickFormat?: string;       // d3-format (numeric) or d3-time-format (time)
   precision?: number;        // numeric decimal/significant precision
   timeFormat?: string;       // explicit d3-time-format for time axes
+  categories?: string[];     // explicit category order for type "category"
 };
 
 /**
