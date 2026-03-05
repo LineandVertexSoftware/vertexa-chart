@@ -16,6 +16,9 @@ const SVGSVGElement = jsWindow.SVGSVGElement;
 globalThis.SVGElement = SVGElement;
 globalThis.SVGSVGElement = SVGSVGElement;
 
+// d3-zoom's defaultTouchable() reads navigator.maxTouchPoints at construction time
+globalThis.navigator = jsWindow.navigator;
+
 test("OverlayD3", async (t) => {
   const { OverlayD3 } = await import("../dist/index.js");
 
