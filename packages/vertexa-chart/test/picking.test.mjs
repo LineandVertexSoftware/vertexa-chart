@@ -291,4 +291,49 @@ test("PickingEngine", async (t) => {
     assert.equal(result.x, 5);
     assert.equal(result.y, 1);
   });
+
+  await t.test("line-only scatter traces remain cpu-pickable after SceneCompiler compilation", async () => {
+    const { SceneCompiler } = await import("../dist/SceneCompiler.js");
+
+    const traces = [
+      {
+        type: "scatter",
+        mode: "lines",
+        x: [0, 0.5, 1],
+        y: [0, 0.5, 1],
+        visible: true
+      }
+    ];
+    const axisManager = {
+      resolveAxisType: () => "linear",
+      getAxis: () => undefined,
+      getBarMode: () => "overlay",
+      getHoverMode: () => "closest"
+    };
+    const sceneCompiler = new SceneCompiler();
+    const scene = sceneCompiler.compile(
+      traces,
+      axisManager,
+      { colors: { palette: ["#1f77b4"] } },
+      BASE_STATE.width,
+      BASE_STATE.height,
+      BASE_STATE.padding
+    );
+
+    assert.equal(scene.markers.length, 0);
+    assert.equal(scene.lines.length, 1);
+    assert.equal(sceneCompiler.markerNormLayers.length, 1);
+    assert.equal(sceneCompiler.markerNormByTrace.has(0), true);
+
+    const gridIndex = makeGridIndex({ built: false });
+    const getState = () => ({ ...BASE_STATE, traces });
+    const engine = new PickingEngine(sceneCompiler, gridIndex, getState, axisManager);
+
+    const hit = engine.cpuPickClosest(160, 120);
+    assert.ok(hit !== null);
+    assert.equal(hit.traceIndex, 0);
+    assert.equal(hit.pointIndex, 1);
+    assert.equal(hit.x, 0.5);
+    assert.equal(hit.y, 0.5);
+  });
 });

@@ -507,17 +507,23 @@ export class SceneCompiler {
 
       const baseColor = getTraceColor(trace, traceIndex, theme.colors.palette);
 
-      if (mode === "markers" || mode === "lines+markers") {
+      const count = points01.length / 2;
+      const hasPickPoints = count > 0 && (mode === "markers" || mode === "lines" || mode === "lines+markers");
+      const showMarkers = mode === "markers" || mode === "lines+markers";
+
+      if (hasPickPoints) {
+        this.markerNormByTrace.set(traceIndex, points01);
+        this.markerNormLayers.push({ traceIndex, points01 });
+      }
+
+      if (showMarkers) {
         const c = parseColor(baseColor) ?? [0.12, 0.55, 0.95];
         const a = clamp01(trace.marker?.opacity ?? 0.35);
 
-        const count = points01.length / 2;
         const baseId = nextBaseId;
         nextBaseId += count;
 
         this.idRanges.push({ baseId, count, traceIndex });
-        this.markerNormByTrace.set(traceIndex, points01);
-        this.markerNormLayers.push({ traceIndex, points01 });
         this.traceToMarkerLayerIdx.set(traceIndex, markers.length);
 
         markers.push({

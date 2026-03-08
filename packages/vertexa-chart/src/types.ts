@@ -452,9 +452,12 @@ export type ChartTooltipOptions = {
 
   /**
    * Return custom tooltip content.
-   * - `string`: rendered as HTML
+   * - `string`: treated as trusted HTML and inserted with `innerHTML`
    * - `Node`: mounted directly in the tooltip container
    * - `null`: hide tooltip
+   *
+   * Use `formatter` for plain text, or return a `Node` if you want to avoid
+   * HTML string injection.
    */
   renderer?: (context: ChartTooltipContext) => string | Node | null;
 };
@@ -651,9 +654,12 @@ export interface ChartPublicApi {
   exportCsvPoints(options?: ChartExportCsvPointsOptions): Blob;
 
   /**
-   * Replace layout and redraw.
+   * Merge layout changes and redraw.
+   *
+   * Nested layout objects are shallow-merged. Arrays such as `annotations`
+   * replace the previous value.
    */
-  setLayout(layout: Layout): void;
+  setLayout(layout: Partial<Layout>): void;
 
   /**
    * Resize the chart viewport in CSS pixels and redraw.

@@ -505,13 +505,13 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     assert.equal(tooltip.style.transform, "translate(62px, 72px)");
   });
 
-  await t.test("tooltip renderer can return html string and hide tooltip", () => {
+  await t.test("tooltip renderer strings are treated as trusted HTML and null hides tooltip", () => {
     const tooltip = tooltipElementStub();
 
     const hoverManager = new HoverManager(
       null, null, () => undefined, tooltip,
       () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces: [], theme: BASE_THEME }),
-      { tooltipRenderer: (ctx) => (ctx.pointIndex % 2 === 0 ? `<b>${ctx.defaultLabel}</b>` : null) },
+      { tooltipRenderer: (ctx) => (ctx.pointIndex % 2 === 0 ? `<strong>${ctx.defaultLabel}</strong><br>${ctx.y}` : null) },
       { getHoverMode: () => "closest" },
       { markerNormLayers: [] },
       () => {}
@@ -527,7 +527,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       screenY: 20,
       defaultLabel: "rendered"
     });
-    assert.equal(tooltip.innerHTML, "<b>rendered</b>");
+    assert.equal(tooltip.innerHTML, "<strong>rendered</strong><br>2");
     assert.equal(tooltip.style.transform, "translate(22px, 32px)");
 
     hoverManager.showTooltip({
@@ -586,6 +586,79 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     assert.equal(timeSpec.tickValues[1] instanceof Date, true);
     assert.equal(timeSpec.tickValues[0].getTime(), t0.getTime());
     assert.equal(timeSpec.tickValues[1].getTime(), t1.getTime());
+  });
+
+  await t.test("setLayout merges nested layout patches and replaces annotations", () => {
+    const compile = spy(() => ({ markers: [], lines: [] }));
+    const resolveLayoutPadding = spy(() => BASE_PADDING);
+    const setLayers = spy();
+    const setSize = spy();
+    const setAxes = spy();
+    const setGrid = spy();
+    const setAnnotations = spy();
+    const setLegend = spy();
+    const scheduleGridRebuild = spy();
+    const render = spy();
+    const applyAriaAttributes = spy();
+
+    const chart = baseChart(Chart);
+    Object.assign(chart, {
+      basePadding: BASE_PADDING,
+      layout: {
+        title: "Existing title",
+        hovermode: "closest",
+        xaxis: { title: "Initial X", range: [0, 10] },
+        grid: { show: true, color: "#d1d5db", opacity: 1 },
+        annotations: [{ type: "label", x: 1, y: 2, text: "old" }]
+      },
+      applyAriaAttributes,
+      sceneCompiler: {
+        compile,
+        xDomainNum: [0, 1],
+        yDomainNum: [0, 1],
+        xCategories: null,
+        yCategories: null
+      },
+      renderer: { setLayers },
+      axisManager: {
+        resolveLayoutPadding,
+        resolveAxisType: () => "linear",
+        makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
+        resolveOverlayGrid: () => ({ show: true }),
+        makeOverlayAnnotations: () => [],
+        isLegendVisible: () => false
+      },
+      overlay: { setSize, setAxes, setGrid, setAnnotations, setLegend },
+      gridIndex: { scheduleRebuild: scheduleGridRebuild },
+      render
+    });
+
+    chart.setLayout({
+      hovermode: "x",
+      xaxis: { title: "Merged X" },
+      grid: { opacity: 0.4 },
+      annotations: [{ type: "label", x: 3, y: 4, text: "new" }]
+    });
+
+    assert.deepEqual(chart.layout, {
+      title: "Existing title",
+      hovermode: "x",
+      xaxis: { title: "Merged X", range: [0, 10] },
+      grid: { show: true, color: "#d1d5db", opacity: 0.4 },
+      annotations: [{ type: "label", x: 3, y: 4, text: "new" }]
+    });
+    assert.equal(resolveLayoutPadding.calls.length, 1);
+    assert.deepEqual(resolveLayoutPadding.calls[0][0], chart.layout);
+    assert.equal(applyAriaAttributes.calls.length, 1);
+    assert.equal(compile.calls.length, 1);
+    assert.equal(setLayers.calls.length, 1);
+    assert.equal(setSize.calls.length, 1);
+    assert.equal(setAxes.calls.length, 1);
+    assert.equal(setGrid.calls.length, 1);
+    assert.equal(setAnnotations.calls.length, 1);
+    assert.equal(setLegend.calls.length, 1);
+    assert.equal(scheduleGridRebuild.calls.length, 1);
+    assert.equal(render.calls.length, 1);
   });
 
   await t.test("appendPoints appends incrementally and applies sliding window", () => {

@@ -141,6 +141,10 @@ new Chart(element: Element, options: ChartOptions)
 | `exportCsvPoints(options?)` | Export chart data as CSV — `Blob` |
 | `destroy()` | Release all GPU and DOM resources |
 
+`setLayout()` merges the provided patch into the current layout. Nested objects such as
+`xaxis`, `yaxis`, `grid`, `legend`, and `margin` are shallow-merged; arrays such as
+`annotations` replace the previous value.
+
 ### Keyboard shortcuts
 
 When the chart container has focus:
@@ -240,15 +244,25 @@ tooltip: {
   formatter: (ctx) => `${ctx.trace.name} — x: ${ctx.x}, y: ${ctx.y}`
 }
 
-// Full DOM renderer
+// Trusted HTML renderer
+tooltip: {
+  renderer: (ctx) => `<strong>${ctx.trace.name}</strong><br>${ctx.y}`
+}
+
+// DOM renderer (avoids innerHTML)
 tooltip: {
   renderer: (ctx) => {
     const div = document.createElement("div");
-    div.innerHTML = `<strong>${ctx.trace.name}</strong><br>${ctx.y}`;
+    const title = document.createElement("strong");
+    title.textContent = String(ctx.trace.name ?? "Trace");
+    div.append(title, document.createElement("br"), document.createTextNode(String(ctx.y)));
     return div;
   }
 }
 ```
+
+If `tooltip.renderer` returns a `string`, Vertexa Chart inserts it with `innerHTML`.
+Only return trusted HTML strings. Use `formatter` for plain text.
 
 ---
 

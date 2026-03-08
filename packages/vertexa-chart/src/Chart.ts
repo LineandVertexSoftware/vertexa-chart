@@ -434,14 +434,17 @@ export class Chart implements ChartPublicApi {
   }
 
   /**
-   * Replace the chart layout and redraw.
+   * Merge layout changes into the current layout and redraw.
    *
-   * @param layout New layout object.
+   * Nested layout objects are shallow-merged. Arrays such as `annotations`
+   * replace the previous value.
+   *
+   * @param layout Partial layout patch.
    * @throws Error if called after `destroy()`.
    */
-  setLayout(layout: Layout) {
+  setLayout(layout: Partial<Layout>) {
     this.assertActive("setLayout");
-    this.layout = layout;
+    this.layout = mergeLayoutPatch(this.layout, layout);
     this.padding = this.axisManager.resolveLayoutPadding(this.layout, this.basePadding);
     this.applyAriaAttributes();
     if (!this.initialized) return;
@@ -952,3 +955,37 @@ export class Chart implements ChartPublicApi {
   }
 }
 
+function mergeLayoutPatch(current: Layout, patch: Partial<Layout>): Layout {
+  const next: Layout = { ...current, ...patch };
+
+  if (hasOwn(patch, "xaxis")) next.xaxis = mergeObject(current.xaxis, patch.xaxis);
+  if (hasOwn(patch, "yaxis")) next.yaxis = mergeObject(current.yaxis, patch.yaxis);
+  if (hasOwn(patch, "grid")) next.grid = mergeObject(current.grid, patch.grid);
+  if (hasOwn(patch, "legend")) next.legend = mergeObject(current.legend, patch.legend);
+  if (hasOwn(patch, "margin")) next.margin = mergeObject(current.margin, patch.margin);
+  if (hasOwn(patch, "axes")) next.axes = mergeAxes(current.axes, patch.axes);
+  if (hasOwn(patch, "annotations")) next.annotations = patch.annotations ? [...patch.annotations] : patch.annotations;
+
+  return next;
+}
+
+function mergeAxes(
+  current: Layout["axes"],
+  patch: Layout["axes"] | undefined
+): Layout["axes"] | undefined {
+  if (patch === undefined) return undefined;
+
+  const next: NonNullable<Layout["axes"]> = { ...(current ?? {}), ...patch };
+  if (hasOwn(patch, "x")) next.x = mergeObject(current?.x, patch.x);
+  if (hasOwn(patch, "y")) next.y = mergeObject(current?.y, patch.y);
+  return next;
+}
+
+function mergeObject<T extends object>(current: T | undefined, patch: T | undefined): T | undefined {
+  if (patch === undefined) return undefined;
+  return { ...(current ?? {}), ...patch } as T;
+}
+
+function hasOwn(value: object, key: PropertyKey): boolean {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}

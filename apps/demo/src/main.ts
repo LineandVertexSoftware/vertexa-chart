@@ -30,30 +30,232 @@ type ExampleId =
   | "bar-interactions"
   | "heatmap-basics";
 
-const EXAMPLES: Array<{ id: ExampleId; title: string; summary: string }> = [
-  { id: "getting-started", title: "Getting Started", summary: "Minimal chart setup and basic trace rendering." },
-  { id: "axis-grid", title: "Axis + Grid", summary: "Tick formatting, precision, time formatting, and grid styling." },
-  { id: "events-api", title: "Events + API", summary: "Event hooks, live API updates, resize, and runtime stats." },
-  { id: "vertexa-workbench", title: "Vertexa Workbench", summary: "Production-style toolbar, layer controls, selection workflow, and status telemetry." },
-  { id: "modebar-multi", title: "Modebar Multi-Chart", summary: "Two charts on one page, each with a local integrated modebar." },
-  { id: "perf-sync-6", title: "Perf Sync 6x1M", summary: "Six charts with 1M points each, synchronized zoom/pan and selection, no sampling." },
-  { id: "bar-basics", title: "Bar Basics", summary: "Use bar traces with custom width, color, opacity, and base." },
-  { id: "bar-time", title: "Bar + Time Axis", summary: "Render time-bucket bars and a trend line on a time axis." },
-  { id: "bar-interactions", title: "Bar Interactions", summary: "Stream bar data in real time with appendPoints()." },
-  { id: "heatmap-basics", title: "Heatmap Basics", summary: "Render a 2D heatmap with colorscale and z-range controls." }
+type ExampleDefinition = {
+  id: ExampleId;
+  title: string;
+  summary: string;
+  category: string;
+  focus: string;
+  tags: string[];
+  apis: string[];
+};
+
+const DEMO_SOURCE_URL = "https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/apps/demo/src/main.ts";
+
+const EXAMPLES: ExampleDefinition[] = [
+  {
+    id: "getting-started",
+    title: "Getting Started",
+    summary: "Minimal chart setup and basic trace rendering.",
+    category: "Foundations",
+    focus: "A smallest-possible chart with one trace, annotations, and hover behavior.",
+    tags: ["Scatter", "Annotations", "Hover"],
+    apis: ["new Chart()", "layout", "traces"]
+  },
+  {
+    id: "axis-grid",
+    title: "Axis + Grid",
+    summary: "Tick formatting, precision, time formatting, and grid styling.",
+    category: "Layout",
+    focus: "Axis formatting, time scales, and grid customization without framework glue.",
+    tags: ["Time axis", "Tick format", "Grid"],
+    apis: ["layout.xaxis", "layout.yaxis", "grid"]
+  },
+  {
+    id: "events-api",
+    title: "Events + API",
+    summary: "Event hooks, live API updates, resize, and runtime stats.",
+    category: "Runtime API",
+    focus: "Mutation methods, export APIs, event callbacks, and instrumentation in one surface.",
+    tags: ["Events", "Mutation", "Export"],
+    apis: ["setTraces()", "appendPoints()", "getPerformanceStats()"]
+  },
+  {
+    id: "vertexa-workbench",
+    title: "Vertexa Workbench",
+    summary: "Production-style toolbar, layer controls, selection workflow, and status telemetry.",
+    category: "Product UI",
+    focus: "A richer dashboard-style shell that demonstrates how far the library can be pushed.",
+    tags: ["Modebar", "Selection", "Layer controls"],
+    apis: ["setPerformanceMode()", "onSelect", "setAspectLock()"]
+  },
+  {
+    id: "modebar-multi",
+    title: "Modebar Multi-Chart",
+    summary: "Two charts on one page, each with a local integrated modebar.",
+    category: "Composition",
+    focus: "Per-chart controls, local export flows, and side-by-side chart composition.",
+    tags: ["Multi-chart", "Modebar", "Fullscreen"],
+    apis: ["zoomBy()", "resetView()", "exportPng()"]
+  },
+  {
+    id: "perf-sync-6",
+    title: "Perf Sync 6x1M",
+    summary: "Six charts with 1M points each, synchronized zoom/pan and selection, no sampling.",
+    category: "Performance",
+    focus: "Full-resolution rendering, shared transforms, and synchronized box selection at scale.",
+    tags: ["1M points", "Sync", "Selection"],
+    apis: ["onZoom", "onSelect", "setPerformanceMode()"]
+  },
+  {
+    id: "bar-basics",
+    title: "Bar Basics",
+    summary: "Use bar traces with custom width, color, opacity, and base.",
+    category: "Trace Types",
+    focus: "Bar trace styling and runtime swapping of base values and datasets.",
+    tags: ["Bar", "Styling", "Runtime update"],
+    apis: ["type: \"bar\"", "setTraces()", "bar.base"]
+  },
+  {
+    id: "bar-time",
+    title: "Bar + Time Axis",
+    summary: "Render time-bucket bars and a trend line on a time axis.",
+    category: "Mixed traces",
+    focus: "A time-scale chart combining bars and a trend line under aligned hover.",
+    tags: ["Bar", "Time axis", "Mixed trace"],
+    apis: ["hovermode: \"x\"", "type: \"bar\"", "type: \"scatter\""]
+  },
+  {
+    id: "bar-interactions",
+    title: "Bar Interactions",
+    summary: "Stream bar data in real time with appendPoints().",
+    category: "Streaming",
+    focus: "Sliding-window updates for a live bar chart paired with a derived EMA line.",
+    tags: ["Streaming", "appendPoints()", "Sliding window"],
+    apis: ["appendPoints()", "setTraces()", "tooltip"]
+  },
+  {
+    id: "heatmap-basics",
+    title: "Heatmap Basics",
+    summary: "Render a 2D heatmap with colorscale and z-range controls.",
+    category: "Trace Types",
+    focus: "Heatmap rendering with runtime palette swaps and explicit z-domain control.",
+    tags: ["Heatmap", "Colorscale", "z-range"],
+    apis: ["type: \"heatmap\"", "setTraces()", "heatmap.zmin/zmax"]
+  }
 ];
 
+const EXAMPLE_BY_ID = new Map<ExampleId, ExampleDefinition>(EXAMPLES.map((example) => [example.id, example]));
+
+function getExampleDefinition(exampleId: ExampleId) {
+  return EXAMPLE_BY_ID.get(exampleId) ?? EXAMPLES[0];
+}
+
+function buildExampleHref(exampleId: ExampleId) {
+  const query = new URLSearchParams();
+  if (highContrastMode) query.set("contrast", "1");
+  query.set("example", exampleId);
+  return `/?${query.toString()}`;
+}
+
 function linkBar(active: ExampleId) {
-  const baseQuery = new URLSearchParams();
-  if (highContrastMode) baseQuery.set("contrast", "1");
   return EXAMPLES
     .map((example) => {
       const cls = example.id === active ? "demo-link is-active" : "demo-link";
-      const query = new URLSearchParams(baseQuery);
-      query.set("example", example.id);
-      return `<a class="${cls}" href="/?${query.toString()}">${example.title}</a>`;
+      return `<a class="${cls}" href="${buildExampleHref(example.id)}">${example.title}</a>`;
     })
     .join("");
+}
+
+async function copyText(text: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "absolute";
+  textarea.style.left = "-9999px";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
+}
+
+function setTemporaryButtonLabel(button: HTMLButtonElement, temporaryLabel: string) {
+  const previous = button.dataset.labelDefault ?? button.textContent ?? "";
+  button.dataset.labelDefault = previous;
+  button.textContent = temporaryLabel;
+  window.setTimeout(() => {
+    button.textContent = button.dataset.labelDefault ?? previous;
+  }, 1200);
+}
+
+function formatPerfBadge(stats: ReturnType<Chart["getPerformanceStats"]>) {
+  if (!Number.isFinite(stats.renderMs.last) || stats.renderMs.last <= 0) {
+    return "render -- ms";
+  }
+  if (stats.fps > 240) {
+    return `render ${stats.renderMs.last.toFixed(2)} ms`;
+  }
+  if (!Number.isFinite(stats.fps) || stats.fps <= 0) {
+    return `render ${stats.renderMs.last.toFixed(2)} ms`;
+  }
+  return `${stats.fps.toFixed(stats.fps < 30 ? 1 : 0)} FPS`;
+}
+
+function renderDemoHeader(active: ExampleId) {
+  const example = getExampleDefinition(active);
+  const tagMarkup = example.tags.map((tag) => `<span class="demo-chip">${tag}</span>`).join("");
+
+  return `
+    <header class="demo-header">
+      <div class="demo-hero">
+        <div class="demo-hero-copy">
+          <p class="demo-kicker">vertexa-chart developer demos</p>
+          <h1>${example.title}</h1>
+          <p class="demo-lead">${example.summary}</p>
+          <p class="demo-sublead">${example.focus}</p>
+          <div class="demo-chip-row">
+            <span class="demo-chip demo-chip--accent">${example.category}</span>
+            ${tagMarkup}
+            ${highContrastMode ? '<span class="demo-chip">High contrast</span>' : ""}
+          </div>
+        </div>
+        <div class="demo-hero-actions">
+          <a class="demo-action" href="${DEMO_SOURCE_URL}" target="_blank" rel="noreferrer">View Source</a>
+          <button id="demo-copy-install" class="demo-action" type="button" data-label-default="Copy Install">Copy Install</button>
+          <button id="demo-copy-link" class="demo-action" type="button" data-label-default="Copy Example Link">Copy Example Link</button>
+          <button id="demo-reset-example" class="demo-action demo-action--primary" type="button" data-label-default="Reset Example">Reset Example</button>
+        </div>
+      </div>
+      <div class="demo-shell-nav">
+        <p class="demo-nav-label">Explore examples</p>
+        <nav class="demo-links">${linkBar(active)}</nav>
+      </div>
+    </header>
+  `;
+}
+
+function attachDemoHeaderActions(active: ExampleId) {
+  const copyInstall = root.querySelector<HTMLButtonElement>("#demo-copy-install");
+  const copyLink = root.querySelector<HTMLButtonElement>("#demo-copy-link");
+  const resetExample = root.querySelector<HTMLButtonElement>("#demo-reset-example");
+
+  copyInstall?.addEventListener("click", async () => {
+    try {
+      await copyText("npm install @lineandvertexsoftware/vertexa-chart");
+      setTemporaryButtonLabel(copyInstall, "Install Copied");
+    } catch {
+      setTemporaryButtonLabel(copyInstall, "Copy Failed");
+    }
+  });
+
+  copyLink?.addEventListener("click", async () => {
+    try {
+      const href = new URL(buildExampleHref(active), window.location.origin).toString();
+      await copyText(href);
+      setTemporaryButtonLabel(copyLink, "Link Copied");
+    } catch {
+      setTemporaryButtonLabel(copyLink, "Copy Failed");
+    }
+  });
+
+  resetExample?.addEventListener("click", () => {
+    window.location.assign(buildExampleHref(active));
+  });
 }
 
 function createDemoChart(host: HTMLElement, options: ChartOptions) {
@@ -229,25 +431,58 @@ function attachFullscreenToggle(options: {
   };
 }
 
-function mountShell(active: ExampleId, title: string, summary: string, panelHtml: string) {
+type DemoShellOptions = {
+  title: string;
+  summary: string;
+  panelTitle?: string;
+  panelHtml: string;
+};
+
+function mountShell(active: ExampleId, options: DemoShellOptions) {
+  const example = getExampleDefinition(active);
+  const apiMarkup = example.apis.map((api) => `<span class="demo-mini-chip">${api}</span>`).join("");
+
   root.innerHTML = `
     <div class="demo-shell">
-      <header class="demo-header">
-        <h1>vertexa-chart docs playground</h1>
-        <p>${summary}</p>
-        ${highContrastMode ? "<p><strong>High-contrast mode:</strong> enabled via <code>?contrast=1</code>.</p>" : ""}
-        <nav class="demo-links">${linkBar(active)}</nav>
-      </header>
+      ${renderDemoHeader(active)}
       <main class="demo-main">
         <section class="demo-chart-wrap">
-          <h2>${title}</h2>
+          <div class="demo-chart-head">
+            <div>
+              <p class="demo-chart-kicker">${example.category}</p>
+              <h2>${options.title}</h2>
+              <p>${options.summary}</p>
+            </div>
+            <div class="demo-chart-meta">
+              <span class="demo-mini-chip demo-mini-chip--accent">Interactive</span>
+              ${apiMarkup}
+            </div>
+          </div>
           <div id="chart-host" class="chart-host"></div>
         </section>
-        <aside class="demo-panel">${panelHtml}</aside>
+        <aside class="demo-panel">
+          <section class="demo-panel-section">
+            <p class="demo-panel-label">Example Route</p>
+            <code class="demo-route">${buildExampleHref(active)}</code>
+          </section>
+          <section class="demo-panel-section">
+            <p class="demo-panel-label">Why This Example Exists</p>
+            <p>${example.focus}</p>
+          </section>
+          <section class="demo-panel-section">
+            <p class="demo-panel-label">Key APIs</p>
+            <div class="demo-chip-row demo-chip-row--panel">${apiMarkup}</div>
+          </section>
+          <section class="demo-panel-section">
+            <h3>${options.panelTitle ?? "Developer Notes"}</h3>
+            ${options.panelHtml}
+          </section>
+        </aside>
       </main>
     </div>
   `;
 
+  attachDemoHeaderActions(active);
   const host = root.querySelector<HTMLDivElement>("#chart-host");
   const panel = root.querySelector<HTMLDivElement>(".demo-panel");
   if (!host || !panel) throw new Error("Demo shell did not render correctly.");
@@ -287,16 +522,18 @@ function makeRandomWalk(n: number, start = 50) {
 }
 
 function runGettingStarted() {
-  const { host, panel } = mountShell(
-    "getting-started",
-    "Example 1: Getting Started",
-    "Create a chart, set layout, and render one line+marker trace.",
+  const { host, panel } = mountShell("getting-started", {
+    title: "Example 1: Getting Started",
+    summary: "Create a chart, set layout, and render one line+marker trace.",
+    panelTitle: "What To Inspect",
+    panelHtml: `
+      <ul class="demo-list">
+        <li>One scatter trace rendered with both line and marker styles.</li>
+        <li>Region, line, and label annotations layered over the plot.</li>
+        <li>Default zoom, pan, hover, and legend behavior with minimal setup.</li>
+      </ul>
     `
-      <h3>Run This Example</h3>
-      <p>URL: <code>/?example=getting-started</code></p>
-      <p>Chart methods used: <code>new Chart()</code>, <code>destroy()</code>.</p>
-    `
-  );
+  });
   const x = linspace(1600, 0, 100);
   const y = makeWaveFromX(x, 0.25, 18, 50, 1.2);
 
@@ -405,21 +642,26 @@ function runGettingStarted() {
     ]
   });
 
-  panel.insertAdjacentHTML("beforeend", "<p>Use mouse wheel + drag in the plot area to zoom/pan.</p>");
+  panel.insertAdjacentHTML(
+    "beforeend",
+    `<section class="demo-panel-section"><p class="demo-panel-label">Interaction Tip</p><p>Use mouse wheel + drag in the plot area to zoom and pan.</p></section>`
+  );
   return () => chart.destroy();
 }
 
 function runAxisGrid() {
-  const { host, panel } = mountShell(
-    "axis-grid",
-    "Example 2: Axis Tick Formatters + Grid Config",
-    "Use time axes, numeric formatters, precision, and customized grid visuals.",
+  const { host, panel } = mountShell("axis-grid", {
+    title: "Example 2: Axis Tick Formatters + Grid Config",
+    summary: "Use time axes, numeric formatters, precision, and customized grid visuals.",
+    panelTitle: "What To Inspect",
+    panelHtml: `
+      <ul class="demo-list">
+        <li>Explicit time ticks with a custom <code>timeFormat</code>.</li>
+        <li>Clamped y-domain with <code>tickFormat</code> and numeric precision.</li>
+        <li>Grid, annotation, and hover changes that stay readable on time scales.</li>
+      </ul>
     `
-      <h3>Run This Example</h3>
-      <p>URL: <code>/?example=axis-grid</code></p>
-      <p>Focus: <code>xaxis.timeFormat</code>, <code>yaxis.tickFormat</code>, <code>grid.*</code>.</p>
-    `
-  );
+  });
 
   const points = 96;
   const start = baseNowMs - 95 * 15 * 60_000;
@@ -509,18 +751,20 @@ function runAxisGrid() {
     ]
   });
 
-  panel.insertAdjacentHTML("beforeend", "<p>Hover in <code>x</code> mode to inspect aligned values.</p>");
+  panel.insertAdjacentHTML(
+    "beforeend",
+    `<section class="demo-panel-section"><p class="demo-panel-label">Interaction Tip</p><p>Hover in <code>x</code> mode to inspect aligned values.</p></section>`
+  );
   return () => chart.destroy();
 }
 
 function runEventsApi() {
-  const { host, panel } = mountShell(
-    "events-api",
-    "Example 3: Event Hooks + Core Runtime API",
-    "Track hover/click/zoom/legend events, mutate traces/layout/size, and inspect performance stats.",
-    `
-      <h3>Run This Example</h3>
-      <p>URL: <code>/?example=events-api</code></p>
+  const { host, panel } = mountShell("events-api", {
+    title: "Example 3: Event Hooks + Core Runtime API",
+    summary: "Track hover/click/zoom/legend events, mutate traces/layout/size, and inspect performance stats.",
+    panelTitle: "Live Runtime Controls",
+    panelHtml: `
+      <p>Trigger runtime methods and watch the event log update in place.</p>
       <div class="btn-row">
         <button id="btn-traces">setTraces()</button>
         <button id="btn-append">appendPoints()</button>
@@ -533,7 +777,7 @@ function runEventsApi() {
       </div>
       <pre id="event-log" class="event-log"></pre>
     `
-  );
+  });
 
   const logEl = panel.querySelector<HTMLPreElement>("#event-log");
   const tracesBtn = panel.querySelector<HTMLButtonElement>("#btn-traces");
@@ -810,14 +1054,11 @@ function runEventsApi() {
 
 function runVertexaWorkbench() {
   root.innerHTML = `
-    <section class="vx-shell">
-      <header class="vx-topbar">
-        <div class="vx-topbar-title">
-          <h1>Vertexa Workbench</h1>
-          <p>WebGPU traces + D3 overlay with pro-grade navigation and selection workflow.</p>
-          <p class="vx-hint">Tip: use <code>Shift + drag</code> for box select and <code>Shift + Alt + drag</code> for lasso.</p>
-        </div>
-      </header>
+    <section class="vx-shell demo-shell demo-shell--wide">
+      ${renderDemoHeader("vertexa-workbench")}
+      <div class="demo-note-band">
+        <strong>Tip:</strong> use <code>Shift + drag</code> for box select and <code>Shift + Alt + drag</code> for lasso.
+      </div>
       <div class="vx-main">
         <article class="vx-plot-card">
           <div class="vx-plot-head">
@@ -901,6 +1142,7 @@ function runVertexaWorkbench() {
       </div>
     </section>
   `;
+  attachDemoHeaderActions("vertexa-workbench");
 
   const host = root.querySelector<HTMLDivElement>("#vx-chart-host");
   const statusEl = root.querySelector<HTMLElement>("#vx-status");
@@ -1102,7 +1344,7 @@ function runVertexaWorkbench() {
     const stats = chart.getPerformanceStats();
     const total = computeTotalPoints();
     const sampledPct = total > 0 ? (stats.sampledPoints / total) * 100 : 100;
-    statusEl.textContent = `${total.toLocaleString()} points • ${stats.fps.toFixed(0)} FPS • ${selectedCount.toLocaleString()} selected • x=${fmtValue(lastPointer.x)} y=${fmtValue(lastPointer.y)}`;
+    statusEl.textContent = `${total.toLocaleString()} points • ${formatPerfBadge(stats)} • ${stats.sampledPoints.toLocaleString()} drawn • ${selectedCount.toLocaleString()} selected • x=${fmtValue(lastPointer.x)} y=${fmtValue(lastPointer.y)}`;
     lodBadgeEl.textContent = sampledPct >= 99.5 ? "LOD: 100%" : `LOD: ${(sampledPct).toFixed(0)}% sample`;
     const bufferMb = computeBufferMb();
     bufferBadgeEl.textContent = `GPU buffers: ${bufferMb.toFixed(1)} MB`;
@@ -1323,12 +1565,8 @@ function runVertexaWorkbench() {
 
 function runModebarMulti() {
   root.innerHTML = `
-    <div class="demo-shell">
-      <header class="demo-header">
-        <h1>vertexa-chart docs playground</h1>
-        <p>Integrated per-chart modebars for multi-chart pages (Plotly-style placement).</p>
-        <nav class="demo-links">${linkBar("modebar-multi")}</nav>
-      </header>
+    <div class="demo-shell demo-shell--wide">
+      ${renderDemoHeader("modebar-multi")}
       <section class="vx-multi-grid">
         <article class="vx-mini-card">
           <h2>Chart A: Throughput</h2>
@@ -1405,6 +1643,7 @@ function runModebarMulti() {
       </section>
     </div>
   `;
+  attachDemoHeaderActions("modebar-multi");
 
   const makeSeries = (count: number, phase: number, amp: number, center: number, noise: number) => {
     const x = new Float32Array(count);
@@ -1503,7 +1742,7 @@ function runModebarMulti() {
       const stats = chart.getPerformanceStats();
       const x = Number.isFinite(pointer.x) ? pointer.x.toFixed(1) : "n/a";
       const y = Number.isFinite(pointer.y) ? pointer.y.toFixed(2) : "n/a";
-      status.textContent = `${stats.fps.toFixed(0)} FPS • ${stats.sampledPoints.toLocaleString()} sampled • x=${x} y=${y}`;
+      status.textContent = `${formatPerfBadge(stats)} • ${stats.sampledPoints.toLocaleString()} drawn • x=${x} y=${y}`;
     };
 
     pan.addEventListener("click", () => {
@@ -1583,7 +1822,7 @@ function runPerfSync6() {
           <header class="perf-card-head">
             <h2>${title}</h2>
             <p>
-              <span id="perf-fps-${i}">-- FPS</span>
+              <span id="perf-fps-${i}">render -- ms</span>
               <span class="perf-divider">|</span>
               <span id="perf-sampled-${i}">-- drawn</span>
               <span class="perf-divider">|</span>
@@ -1597,20 +1836,15 @@ function runPerfSync6() {
     .join("");
 
   root.innerHTML = `
-    <div class="demo-shell perf-shell">
-      <header class="demo-header">
-        <h1>vertexa-chart performance playground</h1>
-        <p>6 charts, 1,000,000 points each, synchronized zoom + selection, full-resolution rendering.</p>
-        ${highContrastMode ? "<p><strong>High-contrast mode:</strong> enabled via <code>?contrast=1</code>.</p>" : ""}
-        <nav class="demo-links">${linkBar("perf-sync-6")}</nav>
-        <div class="perf-toolbar">
-          <button id="perf-reset-all" class="perf-btn" type="button">Reset All Views</button>
-          <button id="perf-clear-selection" class="perf-btn" type="button">Clear Selection</button>
-          <span id="perf-zoom-state" class="perf-pill">Zoom k=1.00 tx=0 ty=0</span>
-          <span id="perf-selection-state" class="perf-pill">Selection: none</span>
-          <span id="perf-sampling-state" class="perf-pill">Sampling check pending...</span>
-        </div>
-      </header>
+    <div class="demo-shell demo-shell--xl perf-shell">
+      ${renderDemoHeader("perf-sync-6")}
+      <div class="perf-toolbar">
+        <button id="perf-reset-all" class="perf-btn" type="button">Reset All Views</button>
+        <button id="perf-clear-selection" class="perf-btn" type="button">Clear Selection</button>
+        <span id="perf-zoom-state" class="perf-pill">Zoom k=1.00 tx=0 ty=0</span>
+        <span id="perf-selection-state" class="perf-pill">Selection: none</span>
+        <span id="perf-sampling-state" class="perf-pill">Sampling check pending...</span>
+      </div>
       <main class="perf-main">
         <section class="perf-grid">${cardHtml}</section>
         <aside class="demo-panel perf-panel">
@@ -1623,6 +1857,7 @@ function runPerfSync6() {
       </main>
     </div>
   `;
+  attachDemoHeaderActions("perf-sync-6");
 
   const resetAllBtn = root.querySelector<HTMLButtonElement>("#perf-reset-all");
   const clearSelectionBtn = root.querySelector<HTMLButtonElement>("#perf-clear-selection");
@@ -1801,15 +2036,15 @@ function runPerfSync6() {
 
   const renderPerfStats = () => {
     let allFullResolution = true;
-    let slowestFps = Number.POSITIVE_INFINITY;
+    let slowestRenderMs = Number.POSITIVE_INFINITY;
     let totalRendered = 0;
     for (let i = 0; i < CHART_COUNT; i++) {
       const stats = charts[i].getPerformanceStats();
-      const fps = Number.isFinite(stats.fps) ? stats.fps : 0;
-      slowestFps = Math.min(slowestFps, fps);
+      const renderMs = Number.isFinite(stats.renderMs.last) ? stats.renderMs.last : 0;
+      slowestRenderMs = Math.min(slowestRenderMs, renderMs);
       totalRendered += stats.sampledPoints;
       allFullResolution = allFullResolution && stats.sampledPoints === POINTS_PER_CHART;
-      fpsEls[i].textContent = `${fps.toFixed(1)} FPS`;
+      fpsEls[i].textContent = formatPerfBadge(stats);
       sampledEls[i].textContent = `${stats.sampledPoints.toLocaleString()} drawn`;
     }
 
@@ -1818,8 +2053,8 @@ function runPerfSync6() {
       : `Sampling detected: ${totalRendered.toLocaleString()} points/frame`;
     samplingStateEl.classList.toggle("is-ok", allFullResolution);
     samplingStateEl.classList.toggle("is-warn", !allFullResolution);
-    if (Number.isFinite(slowestFps)) {
-      samplingStateEl.title = `Slowest chart: ${slowestFps.toFixed(1)} FPS`;
+    if (Number.isFinite(slowestRenderMs)) {
+      samplingStateEl.title = `Slowest chart render: ${slowestRenderMs.toFixed(2)} ms`;
     }
   };
 
@@ -1909,20 +2144,19 @@ function runPerfSync6() {
 }
 
 function runBarBasics() {
-  const { host, panel } = mountShell(
-    "bar-basics",
-    "Example 4: Bar Trace Basics",
-    "Render grouped bars with per-trace width/color/opacity and toggle custom base values.",
-    `
-      <h3>Run This Example</h3>
-      <p>URL: <code>/?example=bar-basics</code></p>
+  const { host, panel } = mountShell("bar-basics", {
+    title: "Example 4: Bar Trace Basics",
+    summary: "Render grouped bars with per-trace width/color/opacity and toggle custom base values.",
+    panelTitle: "Live Runtime Controls",
+    panelHtml: `
+      <p>Use these controls to swap datasets and change the visual baseline without rebuilding the page.</p>
       <div class="btn-row">
         <button id="btn-randomize-bars">setTraces()</button>
         <button id="btn-toggle-base">toggle bar.base</button>
       </div>
       <pre id="bar-log" class="event-log"></pre>
     `
-  );
+  });
 
   const randomizeBtn = panel.querySelector<HTMLButtonElement>("#btn-randomize-bars");
   const baseBtn = panel.querySelector<HTMLButtonElement>("#btn-toggle-base");
@@ -2037,16 +2271,18 @@ function runBarBasics() {
 }
 
 function runBarTime() {
-  const { host, panel } = mountShell(
-    "bar-time",
-    "Example 5: Bar + Time Axis",
-    "Combine time-bucket bar traces with a trend line for mixed bar/scatter workflows.",
+  const { host, panel } = mountShell("bar-time", {
+    title: "Example 5: Bar + Time Axis",
+    summary: "Combine time-bucket bar traces with a trend line for mixed bar/scatter workflows.",
+    panelTitle: "What To Inspect",
+    panelHtml: `
+      <ul class="demo-list">
+        <li>Bar trace values aligned to a time-scale x-axis.</li>
+        <li>A dashed scatter trend line rendered over the same buckets.</li>
+        <li><code>hovermode: "x"</code> for aligned inspection across both traces.</li>
+      </ul>
     `
-      <h3>Run This Example</h3>
-      <p>URL: <code>/?example=bar-time</code></p>
-      <p>Focus: <code>type: \"bar\"</code> with <code>xaxis.type: \"time\"</code> + scatter trend line.</p>
-    `
-  );
+  });
 
   const count = 24;
   const stepMs = 60 * 60 * 1000;
@@ -2138,18 +2374,20 @@ function runBarTime() {
     }
   });
 
-  panel.insertAdjacentHTML("beforeend", "<p>Use x-hover mode to inspect aligned values across bars + line.</p>");
+  panel.insertAdjacentHTML(
+    "beforeend",
+    `<section class="demo-panel-section"><p class="demo-panel-label">Interaction Tip</p><p>Use x-hover mode to inspect aligned values across bars and the trend line.</p></section>`
+  );
   return () => chart.destroy();
 }
 
 function runBarInteractions() {
-  const { host, panel } = mountShell(
-    "bar-interactions",
-    "Example 6: Bar Interactions + appendPoints()",
-    "Stream a bar trace in real time, maintain a sliding window, and pair it with an EMA line.",
-    `
-      <h3>Run This Example</h3>
-      <p>URL: <code>/?example=bar-interactions</code></p>
+  const { host, panel } = mountShell("bar-interactions", {
+    title: "Example 6: Bar Interactions + appendPoints()",
+    summary: "Stream a bar trace in real time, maintain a sliding window, and pair it with an EMA line.",
+    panelTitle: "Live Runtime Controls",
+    panelHtml: `
+      <p>Start the stream, step it manually, or reset the trace history to verify append behavior.</p>
       <div class="btn-row">
         <button id="btn-stream-toggle">Start stream</button>
         <button id="btn-stream-step">appendPoints()</button>
@@ -2157,7 +2395,7 @@ function runBarInteractions() {
       </div>
       <pre id="stream-log" class="event-log"></pre>
     `
-  );
+  });
 
   const toggleBtn = panel.querySelector<HTMLButtonElement>("#btn-stream-toggle");
   const stepBtn = panel.querySelector<HTMLButtonElement>("#btn-stream-step");
@@ -2341,13 +2579,12 @@ function runBarInteractions() {
 }
 
 function runHeatmapBasics() {
-  const { host, panel } = mountShell(
-    "heatmap-basics",
-    "Example 7: Heatmap Basics",
-    "Render a heatmap trace, control z-range, and swap colorscales.",
-    `
-      <h3>Run This Example</h3>
-      <p>URL: <code>/?example=heatmap-basics</code></p>
+  const { host, panel } = mountShell("heatmap-basics", {
+    title: "Example 7: Heatmap Basics",
+    summary: "Render a heatmap trace, control z-range, and swap colorscales.",
+    panelTitle: "Live Runtime Controls",
+    panelHtml: `
+      <p>Randomize values, clamp the z-domain, and swap palettes to test heatmap responsiveness.</p>
       <div class="btn-row">
         <button id="btn-heatmap-randomize">setTraces()</button>
         <button id="btn-heatmap-zrange">toggle z-range</button>
@@ -2355,7 +2592,7 @@ function runHeatmapBasics() {
       </div>
       <pre id="heatmap-log" class="event-log"></pre>
     `
-  );
+  });
 
   const randomizeBtn = panel.querySelector<HTMLButtonElement>("#btn-heatmap-randomize");
   const zrangeBtn = panel.querySelector<HTMLButtonElement>("#btn-heatmap-zrange");

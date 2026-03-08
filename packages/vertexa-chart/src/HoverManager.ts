@@ -407,6 +407,7 @@ export class HoverManager {
       if (hasDomNode && rendered instanceof Node) {
         this.tooltip.replaceChildren(rendered);
       } else {
+        // String renderer output is a trusted-HTML escape hatch.
         this.tooltip.innerHTML = String(rendered);
       }
     } else if (this.hooks.tooltipFormatter) {
