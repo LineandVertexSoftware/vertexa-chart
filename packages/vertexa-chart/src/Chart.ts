@@ -12,9 +12,11 @@ import type {
   ChartAppendPointsUpdate,
   ChartLegendToggleEvent,
   ChartOptions,
+  ChartInteractionRenderMode,
   ChartPerformanceMode,
   ChartPerformanceStats,
   ChartPublicApi,
+  ChartViewTransform,
   ChartZoomEvent,
   Layout,
   Trace,
@@ -50,6 +52,11 @@ import { SceneCompiler } from "./SceneCompiler.js";
 import { PickingEngine } from "./PickingEngine.js";
 import { HoverManager } from "./HoverManager.js";
 import { DataMutationManager, type PreparedUpdate } from "./DataMutationManager.js";
+
+const DEFAULT_LOD_THRESHOLD_POINTS = 50_000;
+const QUALITY_INTERACTION_LOD_TRIGGER_POINTS = 750_000;
+const QUALITY_INTERACTION_LOD_TARGET_POINTS = 250_000;
+const QUALITY_INTERACTION_LOD_IDLE_MS = 180;
 
 /**
  * High-performance chart component with a frozen, minimal public API.
@@ -114,6 +121,9 @@ export class Chart implements ChartPublicApi {
   private hoverRaf = 0;
   private aspectLockEnabled = false;
   private performanceMode: ChartPerformanceMode = "balanced";
+  private interactionRenderMode: ChartInteractionRenderMode = "immediate";
+  private interactionLODTimer: number | null = null;
+  private interactionLODActive = false;
 
   // ---- CPU grid index ----
   private gridIndex = new GridIndex();
@@ -171,6 +181,7 @@ export class Chart implements ChartPublicApi {
     this.toolbarConfig = resolveChartToolbar(opts.toolbar);
     this.traces = opts.traces.map((t) => this.toRuntimeTrace(t));
     this.pickingMode = opts.pickingMode ?? "both";
+    this.interactionRenderMode = opts.interactionRenderMode ?? "immediate";
     this.onHoverHook = opts.onHover;
     this.onClickHook = opts.onClick;
     this.onZoomHook = opts.onZoom;
@@ -247,14 +258,7 @@ export class Chart implements ChartPublicApi {
     // Compile once before overlay creation
     const scene = this.sceneCompiler.compile(this.traces, this.axisManager, this.theme, this.width, this.height, this.padding);
     this.renderer.setLayers(scene);
-    const gridBuildResult = this.gridIndex.build(this.makeGridBuildParams());
-    if (this.enablePerfMonitoring) {
-      this.perfStats.lastGridBuildMs = gridBuildResult.buildMs;
-      this.perfStats.gridBuildCount++;
-      this.perfStats.avgGridBuildMs =
-        (this.perfStats.avgGridBuildMs * (this.perfStats.gridBuildCount - 1) + gridBuildResult.buildMs) /
-        this.perfStats.gridBuildCount;
-    }
+    this.buildGridIndexNow();
 
     const xType = this.axisManager.resolveAxisType("x");
     const yType = this.axisManager.resolveAxisType("y");
@@ -270,10 +274,7 @@ export class Chart implements ChartPublicApi {
       grid: this.axisManager.resolveOverlayGrid(),
       annotations: this.axisManager.makeOverlayAnnotations(xType, yType),
       onZoom: (z) => {
-        this.zoom = z;
-        this.render();
-        this.gridIndex.scheduleRebuild(() => this.makeGridBuildParams(), () => this.destroyed);
-        this.onZoomHook?.(z satisfies ChartZoomEvent);
+        this.applyZoomChange(z, this.interactionRenderMode);
       },
       onHover: (e) => this.hoverManager.onHover(e),
       onClick: this.onClickHook ? (e) => {
@@ -316,7 +317,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
     this.overlay.setLegend(this.axisManager.isLegendVisible() ? this.makeLegendItems() : [], (i) => this.toggleTrace(i));
 
-    this.gridIndex.scheduleRebuild(() => this.makeGridBuildParams(), () => this.destroyed);
+    this.scheduleGridIndexRebuild();
     this.render();
   }
 
@@ -401,7 +402,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
 
-    this.gridIndex.scheduleRebuild(() => this.makeGridBuildParams(), () => this.destroyed);
+    this.scheduleGridIndexRebuild();
     this.render();
   }
 
@@ -463,7 +464,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
     this.overlay.setLegend(this.axisManager.isLegendVisible() ? this.makeLegendItems() : [], (i) => this.toggleTrace(i));
 
-    this.gridIndex.scheduleRebuild(() => this.makeGridBuildParams(), () => this.destroyed);
+    this.scheduleGridIndexRebuild();
     this.render();
   }
 
@@ -476,17 +477,21 @@ export class Chart implements ChartPublicApi {
   setPerformanceMode(mode: ChartPerformanceMode) {
     this.assertActive("setPerformanceMode");
     this.performanceMode = mode;
+    this.resetInteractionLOD();
     if (mode === "quality") {
       this.hoverThrottleMs = 8;
       this.hoverRpx = 9;
+      this.renderer.setLODThreshold(QUALITY_INTERACTION_LOD_TARGET_POINTS);
       this.renderer.setLOD(false);
     } else if (mode === "max-fps") {
       this.hoverThrottleMs = 42;
       this.hoverRpx = 6;
+      this.renderer.setLODThreshold(DEFAULT_LOD_THRESHOLD_POINTS);
       this.renderer.setLOD(true);
     } else {
       this.hoverThrottleMs = 16;
       this.hoverRpx = 8;
+      this.renderer.setLODThreshold(DEFAULT_LOD_THRESHOLD_POINTS);
       this.renderer.setLOD(true);
     }
 
@@ -506,6 +511,13 @@ export class Chart implements ChartPublicApi {
         last: rendererStats.lastRenderMs,
         avg: rendererStats.avgRenderMs
       },
+      gpuRenderMs:
+        rendererStats.lastGpuRenderMs !== null || rendererStats.avgGpuRenderMs !== null
+          ? {
+              last: rendererStats.lastGpuRenderMs ?? 0,
+              avg: rendererStats.avgGpuRenderMs ?? 0
+            }
+          : null,
       pickMs: {
         last: rendererStats.lastPickMs,
         avg: rendererStats.avgPickMs
@@ -531,14 +543,7 @@ export class Chart implements ChartPublicApi {
 
     const scene = this.sceneCompiler.compile(this.traces, this.axisManager, this.theme, this.width, this.height, this.padding);
     this.renderer.setLayers(scene);
-    const gridBuildResult = this.gridIndex.build(this.makeGridBuildParams());
-    if (this.enablePerfMonitoring) {
-      this.perfStats.lastGridBuildMs = gridBuildResult.buildMs;
-      this.perfStats.gridBuildCount++;
-      this.perfStats.avgGridBuildMs =
-        (this.perfStats.avgGridBuildMs * (this.perfStats.gridBuildCount - 1) + gridBuildResult.buildMs) /
-        this.perfStats.gridBuildCount;
-    }
+    this.buildGridIndexNow();
 
     const xType = this.axisManager.resolveAxisType("x");
     const yType = this.axisManager.resolveAxisType("y");
@@ -550,7 +555,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
     this.overlay.setLegend(this.axisManager.isLegendVisible() ? this.makeLegendItems() : [], (i) => this.toggleTrace(i));
 
-    this.gridIndex.scheduleRebuild(() => this.makeGridBuildParams(), () => this.destroyed);
+    this.scheduleGridIndexRebuild();
     this.render();
   }
 
@@ -584,7 +589,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setSize(width, height, this.padding);
     this.render();
 
-    this.gridIndex.scheduleRebuild(() => this.makeGridBuildParams(), () => this.destroyed);
+    this.scheduleGridIndexRebuild();
     if (this.aspectLockEnabled) {
       this.setAspectLock(true);
     }
@@ -600,6 +605,19 @@ export class Chart implements ChartPublicApi {
     this.assertActive("zoomBy");
     if (!this.initialized) return;
     this.overlay.zoomBy(factor, centerPlot);
+  }
+
+  setViewTransform(transform: ChartViewTransform, options?: { renderMode?: ChartInteractionRenderMode }) {
+    this.assertActive("setViewTransform");
+    if (!this.initialized) return;
+    const applied = this.overlay.setZoomTransform(transform, { emitOnZoom: false });
+    if (!applied) return;
+    this.applyZoomChange(applied, options?.renderMode ?? "immediate");
+  }
+
+  setInteractionRenderMode(mode: ChartInteractionRenderMode) {
+    this.assertActive("setInteractionRenderMode");
+    this.interactionRenderMode = mode;
   }
 
   resetView() {
@@ -731,6 +749,8 @@ export class Chart implements ChartPublicApi {
       this.hoverRaf = 0;
     }
 
+    this.resetInteractionLOD();
+
     this.gridIndex.dispose();
 
     this.overlay?.setHoverGuides(null);
@@ -773,6 +793,8 @@ export class Chart implements ChartPublicApi {
       | "setSize"
       | "panBy"
       | "zoomBy"
+      | "setViewTransform"
+      | "setInteractionRenderMode"
       | "resetView"
       | "fitToData"
       | "autoscaleY"
@@ -814,6 +836,57 @@ export class Chart implements ChartPublicApi {
     };
   }
 
+  private applyZoomChange(z: ChartZoomEvent, renderMode: ChartInteractionRenderMode) {
+    this.zoom = z;
+    this.handleInteractiveZoom();
+    if (renderMode === "next-frame") {
+      this.requestRender();
+    } else {
+      this.render();
+    }
+    this.scheduleGridIndexRebuild();
+    this.onZoomHook?.(z satisfies ChartZoomEvent);
+  }
+
+  private shouldMaintainCpuGridIndex() {
+    if (this.pickingMode !== "cpu" && this.pickingMode !== "both") return false;
+    const hoverMode = this.axisManager && typeof this.axisManager.getHoverMode === "function"
+      ? this.axisManager.getHoverMode()
+      : "closest";
+    if (hoverMode !== "closest") return false;
+    return (this.sceneCompiler.markerNormLayers?.length ?? 0) > 0;
+  }
+
+  private buildGridIndexNow() {
+    if (!this.shouldMaintainCpuGridIndex()) {
+      this.resetGridIndex();
+      return;
+    }
+
+    const gridBuildResult = this.gridIndex.build(this.makeGridBuildParams());
+    if (this.enablePerfMonitoring) {
+      this.perfStats.lastGridBuildMs = gridBuildResult.buildMs;
+      this.perfStats.gridBuildCount++;
+      this.perfStats.avgGridBuildMs =
+        (this.perfStats.avgGridBuildMs * (this.perfStats.gridBuildCount - 1) + gridBuildResult.buildMs) /
+        this.perfStats.gridBuildCount;
+    }
+  }
+
+  private scheduleGridIndexRebuild() {
+    if (!this.shouldMaintainCpuGridIndex()) {
+      this.resetGridIndex();
+      return;
+    }
+    this.gridIndex.scheduleRebuild(() => this.makeGridBuildParams(), () => this.destroyed);
+  }
+
+  private resetGridIndex() {
+    if (typeof this.gridIndex.reset === "function") {
+      this.gridIndex.reset();
+    }
+  }
+
   private render() {
     if (!this.initialized) return;
     if (this.destroyed) return;
@@ -835,6 +908,50 @@ export class Chart implements ChartPublicApi {
       if (this.destroyed) return;
       this.render();
     });
+  }
+
+  private handleInteractiveZoom() {
+    if (this.performanceMode !== "quality") return;
+    if (!this.shouldUseInteractionLOD()) return;
+
+    this.interactionLODActive = true;
+    this.renderer.setLOD(true);
+
+    if (this.interactionLODTimer !== null) {
+      window.clearTimeout(this.interactionLODTimer);
+    }
+    this.interactionLODTimer = window.setTimeout(() => {
+      this.interactionLODTimer = null;
+      if (this.destroyed || this.performanceMode !== "quality") return;
+      if (!this.interactionLODActive) return;
+      this.interactionLODActive = false;
+      this.renderer.setLOD(false);
+      this.requestRender();
+    }, QUALITY_INTERACTION_LOD_IDLE_MS);
+  }
+
+  private shouldUseInteractionLOD() {
+    return this.countVisibleMarkerPoints() >= QUALITY_INTERACTION_LOD_TRIGGER_POINTS;
+  }
+
+  private countVisibleMarkerPoints() {
+    let total = 0;
+    for (const trace of this.traces) {
+      if ((trace.visible ?? true) !== true) continue;
+      if (trace.type !== "scatter") continue;
+      const mode = trace.mode ?? "markers";
+      if (mode !== "markers" && mode !== "lines+markers") continue;
+      total += Math.min(trace.x.length, trace.y.length);
+    }
+    return total;
+  }
+
+  private resetInteractionLOD() {
+    if (this.interactionLODTimer !== null) {
+      window.clearTimeout(this.interactionLODTimer);
+      this.interactionLODTimer = null;
+    }
+    this.interactionLODActive = false;
   }
 
 

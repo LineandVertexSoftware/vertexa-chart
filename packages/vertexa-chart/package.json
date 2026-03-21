@@ -17,7 +17,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "pnpm -C ../overlay-d3 build && pnpm -C ../renderer-webgpu build && tsc",
     "dev": "tsc --watch",
     "test": "pnpm build && c8 node --experimental-test-module-mocks --test test/*.test.mjs",
     "coverage": "c8 report --reporter=html",

@@ -139,6 +139,10 @@ const DEFAULT_GRID_STYLE: Required<GridStyle> = {
   strokeWidth: 1
 };
 
+const PAN_AXIS_RERENDER_MIN_INTERVAL_MS = 48;
+const PAN_AXIS_RERENDER_MAX_DRIFT_PX = 72;
+const PAN_AXIS_RERENDER_IDLE_MS = 64;
+
 export type OverlayOptions = {
   svg: SVGSVGElement;
   gridSvg?: SVGSVGElement;
@@ -188,6 +192,10 @@ export class OverlayD3 {
   private gridStyle: Required<GridStyle>;
 
   private currentT = d3.zoomIdentity;
+  private lastAxisRender: ZoomState = { k: 1, x: 0, y: 0 };
+  private lastAxisRenderTs = 0;
+  private deferredAxisRenderTimer: number | null = null;
+  private deferredAxisRenderTarget: ZoomState | null = null;
   private zoomBehavior: d3.ZoomBehavior<SVGRectElement, unknown> | null = null;
   private annotations: AnnotationPrimitive[] = [];
   private _annotationsVersion = 0;
@@ -475,7 +483,7 @@ export class OverlayD3 {
     const zoomed = (event: d3.D3ZoomEvent<SVGRectElement, unknown>) => {
       const t = event.transform;
       this.currentT = t;
-      this.renderAxes({ k: t.k, x: t.x, y: t.y });
+      this.updateAxesForTransform({ k: t.k, x: t.x, y: t.y });
       onZoom({ k: t.k, x: t.x, y: t.y });
     };
 
@@ -670,7 +678,7 @@ export class OverlayD3 {
 
     const k = Math.max(1e-6, this.currentT.k);
     const next = this.currentT.translate(dxCss / k, dyCss / k);
-    this.zoomBehavior.transform(this.zoomRect, next);
+    this.applyProgrammaticTransform(next);
   }
 
   zoomBy(factor: number, centerPlot?: { x: number; y: number }) {
@@ -687,15 +695,38 @@ export class OverlayD3 {
     const nextX = cx - (cx - this.currentT.x) * s;
     const nextY = cy - (cy - this.currentT.y) * s;
     const next = d3.zoomIdentity.translate(nextX, nextY).scale(nextK);
-    this.zoomBehavior.transform(this.zoomRect, next);
+    this.applyProgrammaticTransform(next);
+  }
+
+  setZoomTransform(transform: ZoomState, options?: { emitOnZoom?: boolean }) {
+    if (!this.zoomBehavior) return null;
+
+    const nextK = clamp(transform.k, 0.5, 50, this.currentT.k);
+    const nextX = Number.isFinite(transform.x) ? transform.x : this.currentT.x;
+    const nextY = Number.isFinite(transform.y) ? transform.y : this.currentT.y;
+
+    if (
+      Math.abs(nextK - this.currentT.k) < 1e-9 &&
+      Math.abs(nextX - this.currentT.x) < 1e-3 &&
+      Math.abs(nextY - this.currentT.y) < 1e-3
+    ) {
+      return { k: this.currentT.k, x: this.currentT.x, y: this.currentT.y };
+    }
+
+    const next = d3.zoomIdentity.translate(nextX, nextY).scale(nextK);
+    return this.applyProgrammaticTransform(next, options?.emitOnZoom ?? true);
   }
 
   resetZoom() {
     if (!this.zoomBehavior) return;
-    this.zoomBehavior.transform(this.zoomRect, d3.zoomIdentity);
+    this.applyProgrammaticTransform(d3.zoomIdentity);
   }
 
   destroy() {
+    if (this.deferredAxisRenderTimer !== null) {
+      window.clearTimeout(this.deferredAxisRenderTimer);
+      this.deferredAxisRenderTimer = null;
+    }
     if (this._dragMoveHandler) {
       window.removeEventListener("mousemove", this._dragMoveHandler);
       this._dragMoveHandler = null;
@@ -741,7 +772,85 @@ export class OverlayD3 {
     return { x0, y0, x1, y1 };
   }
 
+  private applyProgrammaticTransform(next: d3.ZoomTransform, emitOnZoom = true) {
+    const node = this.zoomRect.node() as (SVGRectElement & { __zoom?: d3.ZoomTransform }) | null;
+    this.currentT = next;
+    if (node) {
+      node.__zoom = next;
+    }
+    const zoom = { k: next.k, x: next.x, y: next.y };
+    this.updateAxesForTransform(zoom);
+    if (emitOnZoom) {
+      this.opts.onZoom(zoom);
+    }
+    return zoom;
+  }
+
+  private updateAxesForTransform(z: ZoomState) {
+    if (this.shouldDeferAxisRender(z)) {
+      this.applyDeferredPanTransform(z);
+      this.scheduleDeferredAxisRender(z);
+      return;
+    }
+    this.renderAxes(z);
+  }
+
+  private shouldDeferAxisRender(z: ZoomState) {
+    if (this.selecting) return false;
+    if (Math.abs(z.k - this.lastAxisRender.k) > 1e-6) return false;
+
+    const dx = z.x - this.lastAxisRender.x;
+    const dy = z.y - this.lastAxisRender.y;
+    const driftPx = Math.max(Math.abs(dx), Math.abs(dy));
+    if (driftPx < 1e-3) return false;
+
+    return (
+      performance.now() - this.lastAxisRenderTs < PAN_AXIS_RERENDER_MIN_INTERVAL_MS &&
+      driftPx < PAN_AXIS_RERENDER_MAX_DRIFT_PX
+    );
+  }
+
+  private applyDeferredPanTransform(z: ZoomState) {
+    const dx = z.x - this.lastAxisRender.x;
+    const dy = z.y - this.lastAxisRender.y;
+
+    this.gGridRoot?.attr("transform", `translate(${this.padding.l + dx},${this.padding.t + dy})`);
+    this.gAnnotations.attr("transform", `translate(${dx},${dy})`);
+    this.gGuides.attr("transform", `translate(${dx},${dy})`);
+    this.gXAxis.attr("transform", `translate(${dx},${this.plotH})`);
+    this.gYAxis.attr("transform", `translate(0,${dy})`);
+  }
+
+  private scheduleDeferredAxisRender(z: ZoomState) {
+    this.deferredAxisRenderTarget = { ...z };
+    if (this.deferredAxisRenderTimer !== null) {
+      window.clearTimeout(this.deferredAxisRenderTimer);
+    }
+    this.deferredAxisRenderTimer = window.setTimeout(() => {
+      this.deferredAxisRenderTimer = null;
+      const target = this.deferredAxisRenderTarget;
+      this.deferredAxisRenderTarget = null;
+      if (!target) return;
+      this.renderAxes(target);
+    }, PAN_AXIS_RERENDER_IDLE_MS);
+  }
+
+  private resetDeferredPanTransform() {
+    this.gGridRoot?.attr("transform", `translate(${this.padding.l},${this.padding.t})`);
+    this.gAnnotations.attr("transform", null);
+    this.gGuides.attr("transform", null);
+    this.gXAxis.attr("transform", `translate(0,${this.plotH})`);
+    this.gYAxis.attr("transform", "translate(0,0)");
+  }
+
   private renderAxes(z: ZoomState) {
+    if (this.deferredAxisRenderTimer !== null) {
+      window.clearTimeout(this.deferredAxisRenderTimer);
+      this.deferredAxisRenderTimer = null;
+    }
+    this.deferredAxisRenderTarget = null;
+    this.resetDeferredPanTransform();
+
     const plotW = this.plotW;
     const plotH = this.plotH;
     const grid = this.gridStyle;
@@ -801,6 +910,8 @@ export class OverlayD3 {
     type AxisFn = (sel: typeof this.gXAxis) => void;
     this.gXAxis.call(xAxis as unknown as AxisFn);
     this.gYAxis.call(yAxis as unknown as AxisFn);
+    this.lastAxisRender = { ...z };
+    this.lastAxisRenderTs = performance.now();
   }
 
   private applyAxisStyles() {

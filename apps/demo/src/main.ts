@@ -6,6 +6,7 @@ import {
   type HoverMode,
   type Trace
 } from "@lineandvertexsoftware/vertexa-chart";
+import { runPerformanceHarness } from "./performance-harness.js";
 
 const root = document.querySelector<HTMLDivElement>("#root");
 if (!root) throw new Error("Missing #root container.");
@@ -14,6 +15,7 @@ const params = new URLSearchParams(window.location.search);
 const requestedSeed = Number(params.get("seed") ?? Number.NaN);
 const snapshotMode = params.get("snapshot") === "1";
 const highContrastMode = params.get("contrast") === "1";
+const benchmarkMode = params.get("benchmark") === "1";
 const seededRandom = makeSeededRandom(Number.isFinite(requestedSeed) ? requestedSeed : 20260228);
 const rand = () => (snapshotMode ? seededRandom() : Math.random());
 const baseNowMs = snapshotMode ? Date.UTC(2026, 0, 1, 12, 0, 0) : Date.now();
@@ -1849,7 +1851,7 @@ function runPerfSync6() {
         <section class="perf-grid">${cardHtml}</section>
         <aside class="demo-panel perf-panel">
           <h3>Scenario</h3>
-          <p>Every chart renders all 1,000,000 points with <code>setPerformanceMode("quality")</code> (LOD off).</p>
+          <p>Every chart restores full 1,000,000-point resolution at rest with <code>setPerformanceMode("quality")</code>; active pan/zoom may sample briefly to keep motion responsive.</p>
           <p>Zoom or pan any chart and the same transform is mirrored to the other five charts.</p>
           <p>Use <code>Shift + drag</code> to box-select; the selected data window is synchronized across all charts.</p>
           <p>Selection counts are computed against the full arrays, not sampled subsets.</p>
@@ -2012,20 +2014,14 @@ function runPerfSync6() {
       for (let i = 0; i < CHART_COUNT; i++) {
         if (i === sourceIndex) continue;
         const current = zoomStates[i];
-        const safeCurrentK = Math.max(1e-6, current.k);
-        const safeTargetK = Math.max(1e-6, target.k);
-        const factor = safeTargetK / safeCurrentK;
-        if (Math.abs(factor - 1) > 1e-9) {
-          charts[i].zoomBy(factor, { x: 0, y: 0 });
+        if (
+          Math.abs(current.k - target.k) < 1e-9 &&
+          Math.abs(current.x - target.x) < 1e-3 &&
+          Math.abs(current.y - target.y) < 1e-3
+        ) {
+          continue;
         }
-
-        const scaledX = current.x * factor;
-        const scaledY = current.y * factor;
-        const dx = target.x - scaledX;
-        const dy = target.y - scaledY;
-        if (Math.abs(dx) > 1e-3 || Math.abs(dy) > 1e-3) {
-          charts[i].panBy(dx, dy);
-        }
+        charts[i].setViewTransform(target, { renderMode: "next-frame" });
         zoomStates[i] = { ...target };
       }
     } finally {
@@ -2049,8 +2045,8 @@ function runPerfSync6() {
     }
 
     samplingStateEl.textContent = allFullResolution
-      ? `Sampling OFF (quality mode): ${totalRendered.toLocaleString()} points/frame`
-      : `Sampling detected: ${totalRendered.toLocaleString()} points/frame`;
+      ? `Full resolution at rest: ${totalRendered.toLocaleString()} points/frame`
+      : `Motion sampling active: ${totalRendered.toLocaleString()} points/frame`;
     samplingStateEl.classList.toggle("is-ok", allFullResolution);
     samplingStateEl.classList.toggle("is-warn", !allFullResolution);
     if (Number.isFinite(slowestRenderMs)) {
@@ -2094,6 +2090,7 @@ function runPerfSync6() {
       }
     });
     chart.setPerformanceMode("quality");
+    chart.setInteractionRenderMode("next-frame");
     charts.push(chart);
     selectedEls[i].textContent = "0 selected";
   }
@@ -2740,25 +2737,31 @@ const activeExample: ExampleId =
     : "getting-started";
 
 const cleanup =
-  activeExample === "axis-grid"
-    ? runAxisGrid()
-    : activeExample === "events-api"
-      ? runEventsApi()
-      : activeExample === "vertexa-workbench"
-        ? runVertexaWorkbench()
-        : activeExample === "modebar-multi"
-          ? runModebarMulti()
-          : activeExample === "perf-sync-6"
-            ? runPerfSync6()
-      : activeExample === "bar-basics"
-        ? runBarBasics()
-        : activeExample === "bar-time"
-          ? runBarTime()
-          : activeExample === "bar-interactions"
-            ? runBarInteractions()
-            : activeExample === "heatmap-basics"
-              ? runHeatmapBasics()
-          : runGettingStarted();
+  benchmarkMode
+    ? runPerformanceHarness({
+        root,
+        highContrastMode,
+        seed: Number.isFinite(requestedSeed) ? requestedSeed : 20260228
+      })
+    : activeExample === "axis-grid"
+      ? runAxisGrid()
+      : activeExample === "events-api"
+        ? runEventsApi()
+        : activeExample === "vertexa-workbench"
+          ? runVertexaWorkbench()
+          : activeExample === "modebar-multi"
+            ? runModebarMulti()
+            : activeExample === "perf-sync-6"
+              ? runPerfSync6()
+        : activeExample === "bar-basics"
+          ? runBarBasics()
+          : activeExample === "bar-time"
+            ? runBarTime()
+            : activeExample === "bar-interactions"
+              ? runBarInteractions()
+              : activeExample === "heatmap-basics"
+                ? runHeatmapBasics()
+                : runGettingStarted();
 
 window.addEventListener("beforeunload", () => {
   cleanup();

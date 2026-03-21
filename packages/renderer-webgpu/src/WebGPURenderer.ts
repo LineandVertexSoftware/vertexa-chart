@@ -35,6 +35,9 @@ export type PerformanceStats = {
   avgPickMs: number;
   frameCount: number;
   effectiveSampledPoints: number;
+  lastGpuRenderMs: number | null;
+  avgGpuRenderMs: number | null;
+  gpuRenderSupported: boolean;
 };
 
 type MarkerLayerGPU = {
@@ -57,6 +60,223 @@ type LineLayerGPU = {
   dashPattern: [number, number, number, number];
   dashCount: number;
 };
+
+type SharedRendererResources = {
+  scatterPipeline: GPURenderPipeline;
+  linePipeline: GPURenderPipeline;
+  hoverPipeline: GPURenderPipeline;
+  pickPipeline: GPURenderPipeline;
+  quadBuf: GPUBuffer;
+  lineQuadBuf: GPUBuffer;
+  refCount: number;
+};
+
+type TimingQuerySlot = {
+  querySet: GPUQuerySet;
+  resolveBuffer: GPUBuffer;
+  readbackBuffer: GPUBuffer;
+  inFlight: boolean;
+};
+
+const sharedRendererResources = new WeakMap<GPUDevice, Map<string, SharedRendererResources>>();
+
+function acquireSharedRendererResources(device: GPUDevice, format: GPUTextureFormat): SharedRendererResources {
+  const formatKey = String(format);
+  let resourcesByFormat = sharedRendererResources.get(device);
+  if (!resourcesByFormat) {
+    resourcesByFormat = new Map();
+    sharedRendererResources.set(device, resourcesByFormat);
+  }
+
+  const cached = resourcesByFormat.get(formatKey);
+  if (cached) {
+    cached.refCount += 1;
+    return cached;
+  }
+
+  const quad = new Float32Array([
+    -0.5, -0.5,
+     0.5, -0.5,
+     0.5,  0.5,
+    -0.5, -0.5,
+     0.5,  0.5,
+    -0.5,  0.5
+  ]);
+  const quadBuf = device.createBuffer({
+    size: quad.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(quadBuf, 0, quad);
+
+  const lineQuad = new Float32Array([
+    0, -1,
+    1, -1,
+    1,  1,
+    0, -1,
+    1,  1,
+    0,  1
+  ]);
+  const lineQuadBuf = device.createBuffer({
+    size: lineQuad.byteLength,
+    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(lineQuadBuf, 0, lineQuad);
+
+  const scatterModule = device.createShaderModule({ code: scatterWGSL });
+  const lineModule = device.createShaderModule({ code: lineWGSL });
+  const hoverModule = device.createShaderModule({ code: hoverWGSL });
+  const pickModule = device.createShaderModule({ code: pickWGSL });
+
+  const scatterPipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: scatterModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 2 * 4,
+          stepMode: "vertex",
+          attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }]
+        }
+      ]
+    },
+    fragment: {
+      module: scatterModule,
+      entryPoint: "fs_main",
+      targets: [
+        {
+          format,
+          blend: {
+            color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+            alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+          }
+        }
+      ]
+    },
+    primitive: { topology: "triangle-list" }
+  });
+
+  const linePipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: lineModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 2 * 4,
+          stepMode: "vertex",
+          attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }]
+        },
+        {
+          arrayStride: 4 * 4,
+          stepMode: "instance",
+          attributes: [
+            { shaderLocation: 1, offset: 0, format: "float32x2" },
+            { shaderLocation: 2, offset: 2 * 4, format: "float32x2" }
+          ]
+        }
+      ]
+    },
+    fragment: {
+      module: lineModule,
+      entryPoint: "fs_main",
+      targets: [
+        {
+          format,
+          blend: {
+            color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+            alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+          }
+        }
+      ]
+    },
+    primitive: { topology: "triangle-list" }
+  });
+
+  const hoverPipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: hoverModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 2 * 4,
+          stepMode: "vertex",
+          attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }]
+        },
+        {
+          arrayStride: 2 * 4,
+          stepMode: "instance",
+          attributes: [{ shaderLocation: 1, offset: 0, format: "float32x2" }]
+        }
+      ]
+    },
+    fragment: {
+      module: hoverModule,
+      entryPoint: "fs_main",
+      targets: [
+        {
+          format,
+          blend: {
+            color: { srcFactor: "src-alpha", dstFactor: "one-minus-src-alpha", operation: "add" },
+            alpha: { srcFactor: "one", dstFactor: "one-minus-src-alpha", operation: "add" }
+          }
+        }
+      ]
+    },
+    primitive: { topology: "triangle-list" }
+  });
+
+  const pickPipeline = device.createRenderPipeline({
+    layout: "auto",
+    vertex: {
+      module: pickModule,
+      entryPoint: "vs_main",
+      buffers: [
+        {
+          arrayStride: 2 * 4,
+          stepMode: "vertex",
+          attributes: [{ shaderLocation: 0, offset: 0, format: "float32x2" }]
+        }
+      ]
+    },
+    fragment: {
+      module: pickModule,
+      entryPoint: "fs_main",
+      targets: [{ format: "rgba8unorm" }]
+    },
+    primitive: { topology: "triangle-list" }
+  });
+
+  const created: SharedRendererResources = {
+    scatterPipeline,
+    linePipeline,
+    hoverPipeline,
+    pickPipeline,
+    quadBuf,
+    lineQuadBuf,
+    refCount: 1
+  };
+  resourcesByFormat.set(formatKey, created);
+  return created;
+}
+
+function releaseSharedRendererResources(device: GPUDevice, format: GPUTextureFormat): void {
+  const formatKey = String(format);
+  const resourcesByFormat = sharedRendererResources.get(device);
+  const cached = resourcesByFormat?.get(formatKey);
+  if (!cached) return;
+
+  cached.refCount -= 1;
+  if (cached.refCount > 0) return;
+
+  cached.quadBuf.destroy();
+  cached.lineQuadBuf.destroy();
+  resourcesByFormat?.delete(formatKey);
+  if (resourcesByFormat && resourcesByFormat.size === 0) {
+    sharedRendererResources.delete(device);
+  }
+}
 
 export class WebGPURenderer {
   private canvas!: HTMLCanvasElement;
@@ -111,18 +331,27 @@ export class WebGPURenderer {
     lastPickMs: 0,
     avgPickMs: 0,
     frameCount: 0,
-    effectiveSampledPoints: 0
+    effectiveSampledPoints: 0,
+    lastGpuRenderMs: null,
+    avgGpuRenderMs: null,
+    gpuRenderSupported: false
   };
   private renderTimes: number[] = [];
+  private gpuRenderTimes: number[] = [];
   private pickTimes: number[] = [];
   private maxTimeSamples = 60;
+  private releaseDeviceLease: (() => void) | null = null;
+  private releaseSharedResourcesLease: (() => void) | null = null;
+  private renderTimingSlots: TimingQuerySlot[] = [];
+  private nextRenderTimingSlot = 0;
 
   async mount(init: RendererInit) {
     this.canvas = init.canvas;
-    const { device, context, format } = await initWebGPU(this.canvas);
+    const { device, context, format, release } = await initWebGPU(this.canvas);
     this.device = device;
     this.context = context;
     this.format = format;
+    this.releaseDeviceLease = release;
 
     this.context.configure({
       device: this.device,
@@ -130,11 +359,19 @@ export class WebGPURenderer {
       alphaMode: "premultiplied"
     });
 
-    this.createPipelines();
-    this.createQuadBuffer();
-    this.createLineQuadBuffer();
+    const shared = acquireSharedRendererResources(this.device, this.format);
+    this.scatterPipeline = shared.scatterPipeline;
+    this.linePipeline = shared.linePipeline;
+    this.hoverPipeline = shared.hoverPipeline;
+    this.pickPipeline = shared.pickPipeline;
+    this.quadBuf = shared.quadBuf;
+    this.lineQuadBuf = shared.lineQuadBuf;
+    this.releaseSharedResourcesLease = () => {
+      releaseSharedRendererResources(this.device, this.format);
+    };
     this.createHoverBuffer();
     this.createUniforms();
+    this.createGpuTimingSlots();
   }
 
   setLayers(scene: { markers: MarkerLayerInput[]; lines: LineLayerInput[] }) {
@@ -249,6 +486,10 @@ export class WebGPURenderer {
     this.enableLOD = enabled;
   }
 
+  setLODThreshold(points: number) {
+    this.lodThreshold = Math.max(1, Math.floor(points));
+  }
+
   getStats(): PerformanceStats {
     return { ...this.stats };
   }
@@ -261,8 +502,6 @@ export class WebGPURenderer {
     for (const buf of this.pickUniformsBufs) buf.destroy();
 
     (this.hoverUniformsBuf as GPUBuffer | undefined)?.destroy?.();
-    (this.quadBuf as GPUBuffer | undefined)?.destroy?.();
-    (this.lineQuadBuf as GPUBuffer | undefined)?.destroy?.();
     (this.hoverBuf as GPUBuffer | undefined)?.destroy?.();
 
     (this.pickTex as GPUTexture | undefined)?.destroy?.();
@@ -278,6 +517,11 @@ export class WebGPURenderer {
     }
 
     (this.context as GPUCanvasContext | undefined)?.unconfigure?.();
+    this.releaseSharedResourcesLease?.();
+    this.releaseSharedResourcesLease = null;
+    this.releaseDeviceLease?.();
+    this.releaseDeviceLease = null;
+    this.destroyGpuTimingSlots();
 
     this.markerLayers = [];
     this.lineLayers = [];
@@ -292,7 +536,11 @@ export class WebGPURenderer {
     this.pickReadbackSize = 0;
     this.hoverActive = false;
     this.renderTimes = [];
+    this.gpuRenderTimes = [];
     this.pickTimes = [];
+    this.stats.lastGpuRenderMs = null;
+    this.stats.avgGpuRenderMs = null;
+    this.stats.gpuRenderSupported = false;
   }
 
   render(frame: FrameState) {
@@ -321,7 +569,8 @@ export class WebGPURenderer {
     const view = this.context.getCurrentTexture().createView();
     const encoder = this.device.createCommandEncoder();
 
-    const pass = encoder.beginRenderPass({
+    const timingSlot = this.acquireRenderTimingSlot();
+    const passDescriptor: GPURenderPassDescriptor = {
       colorAttachments: [
         {
           view,
@@ -331,7 +580,23 @@ export class WebGPURenderer {
           storeOp: "store"
         }
       ]
-    });
+    };
+    if (timingSlot) {
+      (
+        passDescriptor as GPURenderPassDescriptor & {
+          timestampWrites: {
+            querySet: GPUQuerySet;
+            beginningOfPassWriteIndex: number;
+            endOfPassWriteIndex: number;
+          };
+        }
+      ).timestampWrites = {
+        querySet: timingSlot.querySet,
+        beginningOfPassWriteIndex: 0,
+        endOfPassWriteIndex: 1
+      };
+    }
+    const pass = encoder.beginRenderPass(passDescriptor);
     pass.setScissorRect(
       Math.floor(frame.padding.l * frame.dpr),      // x
       Math.floor(frame.padding.t * frame.dpr),      // y
@@ -417,7 +682,12 @@ export class WebGPURenderer {
     }
 
     pass.end();
+    if (timingSlot) {
+      encoder.resolveQuerySet(timingSlot.querySet, 0, 2, timingSlot.resolveBuffer, 0);
+      encoder.copyBufferToBuffer(timingSlot.resolveBuffer, 0, timingSlot.readbackBuffer, 0, 16);
+    }
     this.device.queue.submit([encoder.finish()]);
+    this.collectRenderTiming(timingSlot);
 
     // Update stats
     const elapsed = performance.now() - t0;
@@ -696,6 +966,110 @@ export class WebGPURenderer {
     if (stride <= 1) return total;
     if (offset >= total) return 0;
     return Math.floor((total - 1 - offset) / stride) + 1;
+  }
+
+  private createGpuTimingSlots() {
+    const supportsTimestampQuery = Boolean(
+      this.device &&
+      "features" in this.device &&
+      this.device.features &&
+      typeof this.device.features.has === "function" &&
+      this.device.features.has("timestamp-query") &&
+      typeof this.device.createQuerySet === "function"
+    );
+    if (!supportsTimestampQuery) {
+      this.renderTimingSlots = [];
+      this.stats.gpuRenderSupported = false;
+      return;
+    }
+
+    try {
+      this.renderTimingSlots = Array.from({ length: 3 }, () => ({
+        querySet: this.device.createQuerySet({
+          type: "timestamp",
+          count: 2
+        }),
+        resolveBuffer: this.device.createBuffer({
+          size: 256,
+          usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
+        }),
+        readbackBuffer: this.device.createBuffer({
+          size: 16,
+          usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+        }),
+        inFlight: false
+      }));
+      this.nextRenderTimingSlot = 0;
+      this.stats.gpuRenderSupported = true;
+    } catch {
+      this.renderTimingSlots = [];
+      this.nextRenderTimingSlot = 0;
+      this.stats.gpuRenderSupported = false;
+    }
+  }
+
+  private destroyGpuTimingSlots() {
+    for (const slot of this.renderTimingSlots) {
+      try {
+        if (slot.readbackBuffer.mapState === "mapped") {
+          slot.readbackBuffer.unmap();
+        }
+      } catch {
+        // best-effort cleanup
+      }
+      slot.resolveBuffer.destroy();
+      slot.readbackBuffer.destroy();
+      slot.querySet.destroy?.();
+    }
+    this.renderTimingSlots = [];
+    this.nextRenderTimingSlot = 0;
+  }
+
+  private acquireRenderTimingSlot(): TimingQuerySlot | null {
+    if (!this.stats.gpuRenderSupported || this.renderTimingSlots.length === 0) {
+      return null;
+    }
+
+    for (let attempt = 0; attempt < this.renderTimingSlots.length; attempt++) {
+      const index = (this.nextRenderTimingSlot + attempt) % this.renderTimingSlots.length;
+      const slot = this.renderTimingSlots[index];
+      if (slot.inFlight) continue;
+      slot.inFlight = true;
+      this.nextRenderTimingSlot = (index + 1) % this.renderTimingSlots.length;
+      return slot;
+    }
+
+    return null;
+  }
+
+  private collectRenderTiming(slot: TimingQuerySlot | null) {
+    if (!slot) return;
+
+    void slot.readbackBuffer.mapAsync(GPUMapMode.READ).then(() => {
+      try {
+        const mapped = slot.readbackBuffer.getMappedRange(0, 16);
+        const timestamps = new BigUint64Array(mapped.slice(0));
+        const elapsedNs = timestamps[1] > timestamps[0] ? Number(timestamps[1] - timestamps[0]) : 0;
+        const elapsedMs = elapsedNs / 1_000_000;
+
+        if (Number.isFinite(elapsedMs) && elapsedMs >= 0 && this.stats.gpuRenderSupported) {
+          this.stats.lastGpuRenderMs = elapsedMs;
+          this.gpuRenderTimes.push(elapsedMs);
+          if (this.gpuRenderTimes.length > this.maxTimeSamples) this.gpuRenderTimes.shift();
+          this.stats.avgGpuRenderMs =
+            this.gpuRenderTimes.reduce((sum, value) => sum + value, 0) / this.gpuRenderTimes.length;
+        }
+      } finally {
+        try {
+          slot.readbackBuffer.unmap();
+        } catch {
+          // best-effort cleanup
+        }
+        slot.inFlight = false;
+      }
+    }).catch(() => {
+      slot.inFlight = false;
+    });
   }
 
   // ----------------------------

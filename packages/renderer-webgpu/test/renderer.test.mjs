@@ -177,4 +177,40 @@ test("initWebGPU — failure modes", async (t) => {
     assert.equal(result.context, mockContext);
     assert.equal(result.format, "bgra8unorm");
   });
+
+  await t.test("reuses the shared device across multiple canvases", async () => {
+    let adapterRequests = 0;
+    let deviceRequests = 0;
+    const mockDevice = {};
+    const mockAdapter = {
+      requestDevice: async () => {
+        deviceRequests += 1;
+        return mockDevice;
+      }
+    };
+    const mockGpu = {
+      requestAdapter: async () => {
+        adapterRequests += 1;
+        return mockAdapter;
+      },
+      getPreferredCanvasFormat: () => "bgra8unorm"
+    };
+
+    Object.defineProperty(globalThis, "navigator", {
+      value: { gpu: mockGpu },
+      writable: true,
+      configurable: true
+    });
+
+    const first = await initWebGPU({ getContext: () => ({ id: "ctx-1" }) });
+    const second = await initWebGPU({ getContext: () => ({ id: "ctx-2" }) });
+
+    assert.equal(first.device, mockDevice);
+    assert.equal(second.device, mockDevice);
+    assert.equal(adapterRequests, 1);
+    assert.equal(deviceRequests, 1);
+
+    first.release();
+    second.release();
+  });
 });

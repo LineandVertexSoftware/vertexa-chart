@@ -114,7 +114,8 @@ function baseChart(Chart) {
     theme: BASE_THEME,
     traces: [],
     zoom: BASE_ZOOM,
-    dpr: 1
+    dpr: 1,
+    pickingMode: "both"
   });
 }
 
@@ -244,11 +245,12 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         compile: spy(() => ({ markers: [], lines: [] })),
         xDomainNum: [0, 1],
         yDomainNum: [0, 1],
-        markerNormLayers: []
+        markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.2, 0.4]) }]
       },
       renderer: { setLayers: rendererSetLayers },
       gridIndex: { build: rebuildGridIndex, scheduleRebuild: scheduleGridRebuild },
       axisManager: {
+        getHoverMode: () => "closest",
         resolveAxisType: () => "linear",
         makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
         resolveOverlayGrid: () => ({ show: true }),
@@ -300,6 +302,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       svg,
       overlay: { setSize: overlaySetSize },
       render,
+      sceneCompiler: { markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.1, 0.2]) }] },
+      axisManager: { getHoverMode: () => "closest" },
       gridIndex: { scheduleRebuild: scheduleGridRebuild },
       aspectLockEnabled: false
     });
@@ -362,6 +366,100 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     }));
 
     assert.equal(panBy.calls.length, 0);
+  });
+
+  await t.test("setViewTransform applies a single exact transform update", () => {
+    const setZoomTransform = spy();
+
+    const chart = baseChart(Chart);
+    Object.assign(chart, {
+      overlay: { setZoomTransform }
+    });
+
+    chart.setViewTransform({ k: 2.5, x: 48, y: -12 });
+
+    assert.equal(setZoomTransform.calls.length, 1);
+    assert.deepEqual(setZoomTransform.calls[0], [{ k: 2.5, x: 48, y: -12 }, { emitOnZoom: false }]);
+  });
+
+  await t.test("next-frame interaction render mode batches zoom redraws through requestAnimationFrame", () => {
+    const render = spy();
+    const requestRender = spy();
+    const scheduleGridIndexRebuild = spy();
+    const handleInteractiveZoom = spy();
+    const zoomEvents = [];
+
+    const chart = baseChart(Chart);
+    Object.assign(chart, {
+      render,
+      requestRender,
+      scheduleGridIndexRebuild,
+      handleInteractiveZoom,
+      onZoomHook: (event) => zoomEvents.push(event)
+    });
+
+    chart.setInteractionRenderMode("next-frame");
+    chart.applyZoomChange({ k: 1.5, x: 24, y: -6 }, chart.interactionRenderMode);
+
+    assert.equal(render.calls.length, 0);
+    assert.equal(requestRender.calls.length, 1);
+    assert.equal(scheduleGridIndexRebuild.calls.length, 1);
+    assert.equal(handleInteractiveZoom.calls.length, 1);
+    assert.deepEqual(zoomEvents[0], { k: 1.5, x: 24, y: -6 });
+  });
+
+  await t.test("setLayout skips cpu grid rebuilds when closest-mode picking is inactive", () => {
+    const overlaySetSize = spy();
+    const overlaySetAxes = spy();
+    const overlaySetGrid = spy();
+    const overlaySetAnnotations = spy();
+    const overlaySetLegend = spy();
+    const rendererSetLayers = spy();
+    const gridReset = spy();
+    const scheduleGridRebuild = spy();
+    const render = spy();
+
+    const chart = baseChart(Chart);
+    Object.assign(chart, {
+      basePadding: BASE_PADDING,
+      applyAriaAttributes: spy(),
+      overlay: {
+        setSize: overlaySetSize,
+        setAxes: overlaySetAxes,
+        setGrid: overlaySetGrid,
+        setAnnotations: overlaySetAnnotations,
+        setLegend: overlaySetLegend
+      },
+      renderer: { setLayers: rendererSetLayers },
+      sceneCompiler: {
+        compile: spy(() => ({ markers: [], lines: [] })),
+        xDomainNum: [0, 1],
+        yDomainNum: [0, 1],
+        xCategories: undefined,
+        yCategories: undefined,
+        markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.2, 0.3]) }]
+      },
+      axisManager: {
+        resolveLayoutPadding: () => BASE_PADDING,
+        resolveAxisType: () => "linear",
+        makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
+        resolveOverlayGrid: () => ({ show: true }),
+        makeOverlayAnnotations: () => [],
+        isLegendVisible: () => false,
+        getHoverMode: () => "none"
+      },
+      gridIndex: {
+        reset: gridReset,
+        scheduleRebuild: scheduleGridRebuild
+      },
+      render
+    });
+
+    chart.setLayout({ hovermode: "none" });
+
+    assert.equal(gridReset.calls.length, 1);
+    assert.equal(scheduleGridRebuild.calls.length, 0);
+    assert.equal(render.calls.length, 1);
   });
 
   await t.test("box select emits selected point indices grouped by trace", () => {
@@ -617,10 +715,12 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         xDomainNum: [0, 1],
         yDomainNum: [0, 1],
         xCategories: null,
-        yCategories: null
+        yCategories: null,
+        markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.1, 0.2]) }]
       },
       renderer: { setLayers },
       axisManager: {
+        getHoverMode: () => "x",
         resolveLayoutPadding,
         resolveAxisType: () => "linear",
         makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
@@ -657,7 +757,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     assert.equal(setGrid.calls.length, 1);
     assert.equal(setAnnotations.calls.length, 1);
     assert.equal(setLegend.calls.length, 1);
-    assert.equal(scheduleGridRebuild.calls.length, 1);
+    assert.equal(scheduleGridRebuild.calls.length, 0);
     assert.equal(render.calls.length, 1);
   });
 
@@ -680,10 +780,11 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         compile: spy(() => ({ markers: [], lines: [] })),
         xDomainNum: [0, 1],
         yDomainNum: [0, 1],
-        markerNormLayers: []
+        markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.1, 0.2, 0.3, 0.4]) }]
       },
       renderer: { setLayers: rendererSetLayers },
       axisManager: {
+        getHoverMode: () => "closest",
         resolveAxisType: () => "linear",
         makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
         resolveOverlayGrid: () => ({ show: true }),

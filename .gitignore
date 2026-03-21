@@ -32,3 +32,4 @@ pnpm-debug.log*
 # Testing
 coverage/
 .nyc_output/
+apps/demo/test/perf-artifacts/

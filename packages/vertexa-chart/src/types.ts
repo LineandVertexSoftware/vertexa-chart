@@ -413,10 +413,18 @@ export type ChartClickEvent = {
   point: ChartPoint | null;
 };
 
-export type ChartZoomEvent = {
+export type ChartViewTransform = {
   k: number;
   x: number;
   y: number;
+};
+
+export type ChartZoomEvent = ChartViewTransform;
+
+export type ChartInteractionRenderMode = "immediate" | "next-frame";
+
+export type ChartViewTransformOptions = {
+  renderMode?: ChartInteractionRenderMode;
 };
 
 export type ChartLegendToggleEvent = {
@@ -605,12 +613,14 @@ export type ChartExportCsvPointsOptions = {
  *
  * - `fps` is estimated from the rolling average render time.
  * - `sampledPoints` is the effective marker instance count from the latest frame.
- * - `renderMs` and `pickMs` are timings in milliseconds.
+ * - `renderMs` and `pickMs` are CPU-side timings in milliseconds.
+ * - `gpuRenderMs` is populated when the browser exposes WebGPU timestamp queries.
  */
 export type ChartPerformanceStats = {
   fps: number;
   sampledPoints: number;
   renderMs: ChartLatencyStats;
+  gpuRenderMs: ChartLatencyStats | null;
   pickMs: ChartLatencyStats;
   frameCount: number;
 };
@@ -677,6 +687,23 @@ export interface ChartPublicApi {
   zoomBy(factor: number, centerPlot?: { x: number; y: number }): void;
 
   /**
+   * Apply an exact zoom/pan transform in one step.
+   *
+   * Useful for synchronizing linked charts without separate `zoomBy()` and
+   * `panBy()` calls.
+   */
+  setViewTransform(transform: ChartViewTransform, options?: ChartViewTransformOptions): void;
+
+  /**
+   * Choose whether zoom/pan interactions redraw immediately or on the next
+   * animation frame.
+   *
+   * Linked chart groups can use `"next-frame"` to batch follower redraws into
+   * a single browser frame.
+   */
+  setInteractionRenderMode(mode: ChartInteractionRenderMode): void;
+
+  /**
    * Reset zoom/pan transform to the default view.
    */
   resetView(): void;
@@ -728,6 +755,12 @@ export type ChartOptions = {
   traces: Trace[];
 
   pickingMode?: "cpu" | "gpu" | "both";
+  /**
+   * Redraw policy for user-driven zoom/pan interactions.
+   *
+   * Defaults to `"immediate"`.
+   */
+  interactionRenderMode?: ChartInteractionRenderMode;
   onHover?: (event: ChartHoverEvent) => void;
   onClick?: (event: ChartClickEvent) => void;
   onZoom?: (event: ChartZoomEvent) => void;

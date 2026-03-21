@@ -130,12 +130,14 @@ new Chart(element: Element, options: ChartOptions)
 | `setSize(width, height)` | Resize the chart |
 | `panBy(dxCss, dyCss)` | Pan by CSS-pixel delta |
 | `zoomBy(factor, centerPlot?)` | Zoom around an optional plot-space point |
+| `setViewTransform({ k, x, y })` | Apply an exact zoom/pan transform in one step |
+| `setInteractionRenderMode(mode)` | Choose immediate vs next-frame redraws for zoom/pan interactions |
 | `resetView()` | Reset zoom and pan |
 | `fitToData()` | Fit view to full data extent |
 | `autoscaleY()` | Recompute y-domain for the visible x-range |
 | `setAspectLock(enabled)` | Lock equal-unit aspect ratio |
 | `setPerformanceMode(mode)` | `"quality" \| "balanced" \| "max-fps"` |
-| `getPerformanceStats()` | Returns `{ fps, renderMs, pickMs, sampledPoints }` |
+| `getPerformanceStats()` | Returns `{ fps, renderMs, gpuRenderMs, pickMs, sampledPoints }` |
 | `exportPng(options?)` | Export current view as PNG — `Promise<Blob>` |
 | `exportSvg(options?)` | Export current view as SVG — `Promise<Blob>` |
 | `exportCsvPoints(options?)` | Export chart data as CSV — `Blob` |
@@ -270,8 +272,10 @@ Only return trusted HTML strings. Use `formatter` for plain text.
 
 - **LOD sampling** kicks in automatically above ~50 k visible points, keeping rendering smooth.
 - **`pickingMode: "both"`** (default) uses a CPU grid index for hover stability during pan and GPU picking for accurate hit detection in dense data.
-- Use `setPerformanceMode("max-fps")` when rendering at high frequency; `"quality"` prefers anti-aliasing.
-- `getPerformanceStats()` returns live FPS, render latency, pick latency, and sampled point count.
+- Use `setPerformanceMode("max-fps")` when rendering at high frequency; `"quality"` restores full resolution at rest and may sample briefly during active pan/zoom on very large marker sets.
+- Use `setViewTransform()` when synchronizing linked charts so followers apply one exact transform instead of separate zoom and pan steps.
+- Use `setInteractionRenderMode("next-frame")` for linked charts that should batch source and follower zoom/pan redraws into a single browser frame.
+- `getPerformanceStats()` returns live FPS, CPU render latency, optional GPU render latency, pick latency, and sampled point count.
 
 ---
 
@@ -314,6 +318,59 @@ Open the URL printed by Vite. Append `?example=<name>` to switch between example
 | 6 synchronized charts × 1M points | `perf-sync-6` |
 
 Add `&contrast=1` to any URL to toggle high-contrast mode.
+
+---
+
+## Running the Performance Harness
+
+Use the production demo build for repeatable benchmark runs:
+
+```bash
+pnpm build:demo
+pnpm bench:demo
+```
+
+The harness serves `apps/demo/dist`, opens headless Chrome, runs named benchmark
+scenarios, and writes JSON artifacts to `apps/demo/test/perf-artifacts/`.
+
+For end-user-visible numbers, run the same harness in a normal foreground Chrome
+window instead of headless mode:
+
+```bash
+pnpm bench:demo:visible
+```
+
+By default, headed runs open the benchmark URL in a normal browser window/tab so
+you see the actual harness page. Set `BENCH_VISIBLE_SPAWN=1` to force the older
+raw Chrome-process launcher if you need an isolated temporary profile.
+
+By default it runs:
+
+- `mount-scatter-200k-quality`
+- `pan-scatter-200k-balanced`
+- `append-scatter-50k-window`
+
+Set `BENCH_FULL=1` to include the heavier `pan-scatter-1m-quality`,
+`pan-grid-6x1m-unsynced-quality`, and `pan-sync-6x1m-quality` scenarios, or set `BENCH_SCENARIOS` to a
+comma-separated list of scenario ids. If Chrome is not auto-detected, set
+`CHROME_PATH`. Extra browser flags can be supplied through
+`BENCH_CHROME_ARGS`. Use `BENCH_RUN_TIMEOUT_MS` to raise the per-scenario
+timeout, or pass `--headed` / `--headless` to the demo runner directly.
+
+Each JSON report includes:
+
+- wall-clock operation latency (`operationLatencyMs`)
+- user-visible browser FPS (`observedFps`) plus chart render cadence / op rate (`chartRenderFps`, `panOpsPerSecond`, `throughputPointsPerSecond`)
+- optional GPU pass timing (`gpuRenderMs`) when timestamp queries are available
+- effective sampling ratio (`sampledPoints.lodRatio`)
+- frame-budget stats from `requestAnimationFrame` (`frameBudgetMs`), including
+  `p50` / `p95` / `p99`, `% > 16.7ms`, and `% > 33.3ms`
+
+You can also load a single browser-side scenario directly:
+
+```text
+http://localhost:5173/?benchmark=1&scenario=pan-scatter-200k-balanced
+```
 
 ---
 

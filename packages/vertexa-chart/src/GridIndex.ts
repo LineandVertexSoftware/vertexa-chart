@@ -183,9 +183,24 @@ export class GridIndex {
   }
 
   dispose(): void {
+    this.reset();
+  }
+
+  reset(): void {
     if (this.rebuildTimer !== null) {
       clearTimeout(this.rebuildTimer);
       this.rebuildTimer = null;
     }
+    this.rebuildPending = false;
+    this.gridMap.clear();
+    this.gridX = new Float32Array(0);
+    this.gridY = new Float32Array(0);
+    this.gridTrace = new Uint32Array(0);
+    this.gridPoint = new Uint32Array(0);
+    this.built = false;
+    this.lastZoomK = 1;
+    this.lastZoomX = 0;
+    this.lastZoomY = 0;
+    this.lastBuildTs = 0;
   }
 }
