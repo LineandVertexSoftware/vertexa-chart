@@ -171,6 +171,7 @@ export class Chart implements ChartPublicApi {
       zoom: this.zoom,
       xDomainNum: this.sceneCompiler.xDomainNum,
       yDomainNum: this.sceneCompiler.yDomainNum,
+      y2DomainNum: this.sceneCompiler.y2DomainNum,
       width: this.width,
       height: this.height,
       padding: this.padding
@@ -271,6 +272,7 @@ export class Chart implements ChartPublicApi {
       padding: this.padding,
       xAxis: this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
       yAxis: this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined),
+      y2Axis: this.makeY2AxisSpec(),
       grid: this.axisManager.resolveOverlayGrid(),
       annotations: this.axisManager.makeOverlayAnnotations(xType, yType),
       onZoom: (z) => {
@@ -311,7 +313,8 @@ export class Chart implements ChartPublicApi {
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
       this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined),
+      this.makeY2AxisSpec()
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
@@ -397,7 +400,8 @@ export class Chart implements ChartPublicApi {
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
       this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined),
+      this.makeY2AxisSpec()
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
@@ -458,7 +462,8 @@ export class Chart implements ChartPublicApi {
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
       this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined),
+      this.makeY2AxisSpec()
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
@@ -549,7 +554,8 @@ export class Chart implements ChartPublicApi {
     const yType = this.axisManager.resolveAxisType("y");
     this.overlay.setAxes(
       this.axisManager.makeOverlayAxisSpec("x", xType, this.sceneCompiler.xDomainNum, this.sceneCompiler.xCategories ?? undefined),
-      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined)
+      this.axisManager.makeOverlayAxisSpec("y", yType, this.sceneCompiler.yDomainNum, this.sceneCompiler.yCategories ?? undefined),
+      this.makeY2AxisSpec()
     );
     this.overlay.setGrid(this.axisManager.resolveOverlayGrid());
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
@@ -653,6 +659,8 @@ export class Chart implements ChartPublicApi {
     for (const trace of this.traces) {
       const vis = trace.visible ?? true;
       if (vis !== true) continue;
+      // Skip traces bound to y2 — autoscaleY only affects the primary y-axis.
+      if ((trace as { yaxis?: string }).yaxis === "y2") continue;
 
       if (trace.type === "heatmap") {
         const xs = Array.from(trace.x);
@@ -825,6 +833,12 @@ export class Chart implements ChartPublicApi {
 
 
 
+
+  private makeY2AxisSpec() {
+    if (!this.axisManager.hasY2Traces() || !this.sceneCompiler.y2DomainNum) return undefined;
+    const y2Type = this.axisManager.resolveAxisType("y2");
+    return this.axisManager.makeOverlayAxisSpec("y2", y2Type, this.sceneCompiler.y2DomainNum, this.sceneCompiler.y2Categories ?? undefined);
+  }
 
   private makeGridBuildParams(): GridBuildParams {
     return {
@@ -1077,6 +1091,7 @@ function mergeLayoutPatch(current: Layout, patch: Partial<Layout>): Layout {
 
   if (hasOwn(patch, "xaxis")) next.xaxis = mergeObject(current.xaxis, patch.xaxis);
   if (hasOwn(patch, "yaxis")) next.yaxis = mergeObject(current.yaxis, patch.yaxis);
+  if (hasOwn(patch, "yaxis2")) next.yaxis2 = mergeObject(current.yaxis2, patch.yaxis2);
   if (hasOwn(patch, "grid")) next.grid = mergeObject(current.grid, patch.grid);
   if (hasOwn(patch, "legend")) next.legend = mergeObject(current.legend, patch.legend);
   if (hasOwn(patch, "margin")) next.margin = mergeObject(current.margin, patch.margin);

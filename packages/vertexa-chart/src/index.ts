@@ -46,5 +46,6 @@ export type {
   HoverMode,
   LegendLayout,
   Margin,
-  Datum
+  Datum,
+  TraceYAxisBinding
 } from "./types.js";

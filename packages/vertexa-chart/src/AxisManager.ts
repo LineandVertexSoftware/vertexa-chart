@@ -21,6 +21,7 @@ export type AxisManagerState = {
   zoom: Zoom;
   xDomainNum: DomainNum;
   yDomainNum: DomainNum;
+  y2DomainNum: DomainNum | null;
   width: number;
   height: number;
   padding: Padding;
@@ -31,22 +32,29 @@ export class AxisManager {
 
   resolveLayoutPadding(layout: Layout, base: Padding): Padding {
     const margin = layout.margin;
-    if (!margin) return { ...base };
-    return {
-      l: coerceMargin(margin.left, base.l),
-      r: coerceMargin(margin.right, base.r),
-      t: coerceMargin(margin.top, base.t),
-      b: coerceMargin(margin.bottom, base.b)
-    };
+    const pad = margin
+      ? {
+          l: coerceMargin(margin.left, base.l),
+          r: coerceMargin(margin.right, base.r),
+          t: coerceMargin(margin.top, base.t),
+          b: coerceMargin(margin.bottom, base.b)
+        }
+      : { ...base };
+    // Add right-side padding for y2 axis when present and no explicit right margin.
+    if (this.hasY2Traces() && !(margin?.right !== undefined && margin.right !== null)) {
+      pad.r = Math.max(pad.r, 55);
+    }
+    return pad;
   }
 
   isLegendVisible(): boolean {
     return this.getState().layout.legend?.show ?? true;
   }
 
-  getAxis(which: "x" | "y"): Axis | undefined {
+  getAxis(which: "x" | "y" | "y2"): Axis | undefined {
     const layout = this.getState().layout;
     if (which === "x") return layout.xaxis ?? layout.axes?.x;
+    if (which === "y2") return layout.yaxis2;
     return layout.yaxis ?? layout.axes?.y;
   }
 
@@ -97,13 +105,26 @@ export class AxisManager {
       : "closest";
   }
 
-  resolveAxisType(which: "x" | "y"): AxisType {
+  /** Check if any trace is bound to the y2 axis. */
+  hasY2Traces(): boolean {
+    const { traces } = this.getState();
+    return traces.some((t) => (t as { yaxis?: string }).yaxis === "y2");
+  }
+
+  resolveAxisType(which: "x" | "y" | "y2"): AxisType {
     const { traces } = this.getState();
     const axis = this.getAxis(which);
     if (axis?.type) return axis.type;
 
+    // For y2, only consider traces bound to y2; for y, only those bound to y (or unbound).
+    const filteredTraces = which === "y2"
+      ? traces.filter((t) => (t as { yaxis?: string }).yaxis === "y2")
+      : which === "y"
+        ? traces.filter((t) => (t as { yaxis?: string }).yaxis !== "y2")
+        : traces;
+
     // Infer category axes from string-valued data.
-    for (const trace of traces) {
+    for (const trace of filteredTraces) {
       const arr = which === "x" ? trace.x : trace.y;
       if (!arr || arr.length === 0) continue; // optional x/y (e.g. HistogramTrace)
       const probe = Math.min(arr.length, 8);
@@ -113,7 +134,7 @@ export class AxisManager {
     }
 
     // Infer time axes from Date-valued data when no explicit type is provided.
-    for (const trace of traces) {
+    for (const trace of filteredTraces) {
       const arr = which === "x" ? trace.x : trace.y;
       if (!arr) continue; // optional x/y (e.g. HistogramTrace)
       const n = arr.length;
@@ -134,7 +155,7 @@ export class AxisManager {
     return "linear";
   }
 
-  makeOverlayAxisSpec(which: "x" | "y", type: AxisType, domain: DomainNum, categories?: string[]): AxisSpec {
+  makeOverlayAxisSpec(which: "x" | "y" | "y2", type: AxisType, domain: DomainNum, categories?: string[]): AxisSpec {
     const { theme } = this.getState();
     const axis = this.getAxis(which);
 

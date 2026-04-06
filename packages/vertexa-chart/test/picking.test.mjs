@@ -31,6 +31,7 @@ test("PickingEngine", async (t) => {
       ySorted: [],
       xDomainNum: [0, 1],
       yDomainNum: [0, 1],
+      y2DomainNum: null,
       ...overrides
     };
   }
@@ -308,7 +309,8 @@ test("PickingEngine", async (t) => {
       resolveAxisType: () => "linear",
       getAxis: () => undefined,
       getBarMode: () => "overlay",
-      getHoverMode: () => "closest"
+      getHoverMode: () => "closest",
+      hasY2Traces: () => false
     };
     const sceneCompiler = new SceneCompiler();
     const scene = sceneCompiler.compile(

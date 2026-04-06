@@ -12,7 +12,8 @@ import type {
   ChartSelectionEvent,
   ChartTooltipContext,
   Datum,
-  Trace
+  Trace,
+  TraceYAxisBinding
 } from "./types.js";
 import {
   type Padding,
@@ -318,13 +319,15 @@ export class HoverManager {
 
   private toChartPoint(hit: PickResult | null): ChartPoint | null {
     if (!hit) return null;
+    const yAxis: TraceYAxisBinding = this.sceneCompiler.traceYAxisBinding.get(hit.traceIndex) ?? "y";
     return {
       traceIndex: hit.traceIndex,
       pointIndex: hit.pointIndex,
       x: hit.x,
       y: hit.y,
       screenX: hit.screenX,
-      screenY: hit.screenY
+      screenY: hit.screenY,
+      yAxis
     };
   }
 

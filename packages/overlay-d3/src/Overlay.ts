@@ -151,6 +151,8 @@ export type OverlayOptions = {
   padding: { l: number; r: number; t: number; b: number };
   xAxis: AxisSpec;
   yAxis: AxisSpec;
+  /** Secondary y-axis rendered on the right side of the plot. */
+  y2Axis?: AxisSpec;
   onZoom: (z: ZoomState) => void;
   onHover?: (e: HoverEvent) => void;
   onClick?: (e: HoverEvent) => void;
@@ -171,6 +173,7 @@ export class OverlayD3 {
   private gGridRoot?: d3.Selection<SVGGElement, unknown, null, undefined>;
   private gXAxis: d3.Selection<SVGGElement, unknown, null, undefined>;
   private gYAxis: d3.Selection<SVGGElement, unknown, null, undefined>;
+  private gY2Axis: d3.Selection<SVGGElement, unknown, null, undefined> | null = null;
   private zoomRect: d3.Selection<SVGRectElement, unknown, null, undefined>;
   private gLegend: d3.Selection<SVGGElement, unknown, null, undefined>;
 
@@ -189,6 +192,7 @@ export class OverlayD3 {
 
   private baseX!: D3Scale;
   private baseY!: D3Scale;
+  private baseY2: D3Scale | null = null;
   private gridStyle: Required<GridStyle>;
 
   private currentT = d3.zoomIdentity;
@@ -236,6 +240,9 @@ export class OverlayD3 {
     this.gRoot = this.svgSel.append("g").attr("class", "overlay-root");
     this.gXAxis = this.gRoot.append("g").attr("class", "x-axis");
     this.gYAxis = this.gRoot.append("g").attr("class", "y-axis");
+    if (opts.y2Axis) {
+      this.gY2Axis = this.gRoot.append("g").attr("class", "y2-axis");
+    }
     this.gAnnotations = this.gRoot.append("g").attr("class", "annotations")
       .style("pointer-events", "none")
       .attr("clip-path", `url(#${this._oid}-plot-clip)`);
@@ -315,11 +322,15 @@ export class OverlayD3 {
 
     this.baseX = makeScale(this.opts.xAxis.type, this.opts.xAxis.domain, [0, plotW]);
     this.baseY = makeScale(this.opts.yAxis.type, this.opts.yAxis.domain, [plotH, 0]);
+    this.baseY2 = this.opts.y2Axis
+      ? makeScale(this.opts.y2Axis.type, this.opts.y2Axis.domain, [plotH, 0])
+      : null;
 
     this.gRoot.attr("transform", `translate(${padding.l},${padding.t})`);
     this.gGridRoot?.attr("transform", `translate(${padding.l},${padding.t})`);
     this.gXAxis.attr("transform", `translate(0,${plotH})`);
     this.gYAxis.attr("transform", `translate(0,0)`);
+    this.gY2Axis?.attr("transform", `translate(${plotW},0)`);
 
     this.zoomRect.attr("x", 0).attr("y", 0).attr("width", plotW).attr("height", plotH);
     this._plotClipRect?.attr("width", plotW).attr("height", plotH);
@@ -331,9 +342,18 @@ export class OverlayD3 {
     this.renderAxes({ k: this.currentT.k, x: this.currentT.x, y: this.currentT.y });
   }
 
-  setAxes(xAxis: AxisSpec, yAxis: AxisSpec) {
+  setAxes(xAxis: AxisSpec, yAxis: AxisSpec, y2Axis?: AxisSpec) {
     this.opts.xAxis = xAxis;
     this.opts.yAxis = yAxis;
+    this.opts.y2Axis = y2Axis;
+    // Lazily create the y2 axis group if needed.
+    if (y2Axis && !this.gY2Axis) {
+      this.gY2Axis = this.gRoot.insert("g", ".annotations").attr("class", "y2-axis");
+    }
+    if (!y2Axis && this.gY2Axis) {
+      this.gY2Axis.remove();
+      this.gY2Axis = null;
+    }
     this.applyAxisStyles();
     this.setSize(this.width, this.height, this.padding);
   }
@@ -745,6 +765,7 @@ export class OverlayD3 {
       .on("mouseleave", null)
       .on("mousedown.selection", null);
     this.gRoot.remove();
+    this.gY2Axis?.remove();
     this.gGridRoot?.remove();
     this.gLegend.remove();
   }
@@ -819,6 +840,7 @@ export class OverlayD3 {
     this.gGuides.attr("transform", `translate(${dx},${dy})`);
     this.gXAxis.attr("transform", `translate(${dx},${this.plotH})`);
     this.gYAxis.attr("transform", `translate(0,${dy})`);
+    this.gY2Axis?.attr("transform", `translate(${this.plotW},${dy})`);
   }
 
   private scheduleDeferredAxisRender(z: ZoomState) {
@@ -841,6 +863,7 @@ export class OverlayD3 {
     this.gGuides.attr("transform", null);
     this.gXAxis.attr("transform", `translate(0,${this.plotH})`);
     this.gYAxis.attr("transform", "translate(0,0)");
+    this.gY2Axis?.attr("transform", `translate(${this.plotW},0)`);
   }
 
   private renderAxes(z: ZoomState) {
@@ -910,6 +933,31 @@ export class OverlayD3 {
     type AxisFn = (sel: typeof this.gXAxis) => void;
     this.gXAxis.call(xAxis as unknown as AxisFn);
     this.gYAxis.call(yAxis as unknown as AxisFn);
+
+    // Render secondary y-axis on the right side if present.
+    if (this.gY2Axis && this.baseY2 && this.opts.y2Axis) {
+      const zy2 = t.rescaleY(this.baseY2);
+      const y2AxisSpec = this.opts.y2Axis;
+      const y2Axis = d3.axisRight(zy2 as AnyAxisScale)
+        .ticks(yTickCount)
+        .tickSize(6)
+        .tickSizeOuter(0);
+
+      if (y2AxisSpec.type === "category" && y2AxisSpec.categories?.length) {
+        const cats = y2AxisSpec.categories;
+        y2Axis.tickValues(cats.map((_, i) => i));
+        y2Axis.tickFormat((d) => cats[Math.round(Number(d))] ?? String(d));
+      } else {
+        if (y2AxisSpec.tickValues && y2AxisSpec.tickValues.length > 0) {
+          y2Axis.tickValues(y2AxisSpec.tickValues);
+        }
+        const y2TickFormatter = makeTickFormatter(y2AxisSpec);
+        if (y2TickFormatter) y2Axis.tickFormat(y2TickFormatter);
+      }
+
+      this.gY2Axis.call(y2Axis as unknown as AxisFn);
+    }
+
     this.lastAxisRender = { ...z };
     this.lastAxisRenderTs = performance.now();
   }
@@ -921,14 +969,17 @@ export class OverlayD3 {
     const tickOpacity = drawGridInAxisLayer ? grid.opacity : 0.45;
     const xFontFamily = normalizeFontFamily(this.opts.xAxis.style?.fontFamily);
     const yFontFamily = normalizeFontFamily(this.opts.yAxis.style?.fontFamily);
+    const y2FontFamily = normalizeFontFamily(this.opts.y2Axis?.style?.fontFamily ?? this.opts.yAxis.style?.fontFamily);
     const xFontSizePx = clamp(this.opts.xAxis.style?.fontSizePx, 1, 96, 12);
     const yFontSizePx = clamp(this.opts.yAxis.style?.fontSizePx, 1, 96, 12);
+    const y2FontSizePx = clamp(this.opts.y2Axis?.style?.fontSizePx ?? this.opts.yAxis.style?.fontSizePx, 1, 96, 12);
     const s = `[data-oid="${this._oid}"]`;
     this._axisStyleEl.text(
       `${s} .domain{opacity:0.6;stroke:${grid.axisColor}}` +
       `${s} .tick line{stroke:${tickStroke};stroke-width:${grid.strokeWidth};stroke-opacity:${tickOpacity};shape-rendering:crispEdges}` +
       `${s} .x-axis .tick text{opacity:0.9;fill:${grid.textColor};font-family:${xFontFamily};font-size:${xFontSizePx}px}` +
-      `${s} .y-axis .tick text{opacity:0.9;fill:${grid.textColor};font-family:${yFontFamily};font-size:${yFontSizePx}px}`
+      `${s} .y-axis .tick text{opacity:0.9;fill:${grid.textColor};font-family:${yFontFamily};font-size:${yFontSizePx}px}` +
+      `${s} .y2-axis .tick text{opacity:0.9;fill:${grid.textColor};font-family:${y2FontFamily};font-size:${y2FontSizePx}px}`
     );
   }
 

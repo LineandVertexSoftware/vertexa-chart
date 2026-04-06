@@ -41,6 +41,7 @@ function mockAxisManager(overrides = {}) {
     getAxis: () => undefined,
     getBarMode: () => "overlay",
     getHoverMode: () => "closest",
+    hasY2Traces: () => false,
     ...overrides
   };
 }

@@ -126,6 +126,7 @@ function mockAxisManager(overrides = {}) {
     getAxis: () => undefined,
     getBarMode: () => "overlay",
     getHoverMode: () => "closest",
+    hasY2Traces: () => false,
     ...overrides
   };
 }
@@ -245,6 +246,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         compile: spy(() => ({ markers: [], lines: [] })),
         xDomainNum: [0, 1],
         yDomainNum: [0, 1],
+      y2DomainNum: null,
         markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.2, 0.4]) }]
       },
       renderer: { setLayers: rendererSetLayers },
@@ -255,7 +257,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
         resolveOverlayGrid: () => ({ show: true }),
         makeOverlayAnnotations: () => [],
-        isLegendVisible: () => false
+        isLegendVisible: () => false,
+        hasY2Traces: () => false
       },
       overlay: { setAxes, setGrid, setAnnotations, setLegend },
       enablePerfMonitoring: false,
@@ -435,6 +438,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         compile: spy(() => ({ markers: [], lines: [] })),
         xDomainNum: [0, 1],
         yDomainNum: [0, 1],
+      y2DomainNum: null,
         xCategories: undefined,
         yCategories: undefined,
         markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.2, 0.3]) }]
@@ -446,7 +450,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         resolveOverlayGrid: () => ({ show: true }),
         makeOverlayAnnotations: () => [],
         isLegendVisible: () => false,
-        getHoverMode: () => "none"
+        getHoverMode: () => "none",
+        hasY2Traces: () => false
       },
       gridIndex: {
         reset: gridReset,
@@ -652,6 +657,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       zoom: BASE_ZOOM,
       xDomainNum: [0, 5],
       yDomainNum: [0, 1],
+      y2DomainNum: null,
       width: 320,
       height: 240,
       padding: BASE_PADDING
@@ -673,6 +679,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       zoom: BASE_ZOOM,
       xDomainNum: [t0.getTime(), t1.getTime()],
       yDomainNum: [0, 1],
+      y2DomainNum: null,
       width: 320,
       height: 240,
       padding: BASE_PADDING
@@ -714,6 +721,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         compile,
         xDomainNum: [0, 1],
         yDomainNum: [0, 1],
+      y2DomainNum: null,
         xCategories: null,
         yCategories: null,
         markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.1, 0.2]) }]
@@ -726,7 +734,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
         resolveOverlayGrid: () => ({ show: true }),
         makeOverlayAnnotations: () => [],
-        isLegendVisible: () => false
+        isLegendVisible: () => false,
+        hasY2Traces: () => false
       },
       overlay: { setSize, setAxes, setGrid, setAnnotations, setLegend },
       gridIndex: { scheduleRebuild: scheduleGridRebuild },
@@ -780,6 +789,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         compile: spy(() => ({ markers: [], lines: [] })),
         xDomainNum: [0, 1],
         yDomainNum: [0, 1],
+      y2DomainNum: null,
         markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.1, 0.2, 0.3, 0.4]) }]
       },
       renderer: { setLayers: rendererSetLayers },
@@ -788,7 +798,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
         resolveAxisType: () => "linear",
         makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
         resolveOverlayGrid: () => ({ show: true }),
-        makeOverlayAnnotations: () => []
+        makeOverlayAnnotations: () => [],
+        hasY2Traces: () => false
       },
       overlay: { setAxes, setGrid, setAnnotations },
       gridIndex: { scheduleRebuild: scheduleGridRebuild },
@@ -830,6 +841,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       zoom: BASE_ZOOM,
       xDomainNum: [0, 1],
       yDomainNum: [0, 1],
+      y2DomainNum: null,
       width: 320,
       height: 240,
       padding: BASE_PADDING
@@ -1038,6 +1050,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       zoom: BASE_ZOOM,
       xDomainNum: [0, 1],
       yDomainNum: [0, 1],
+      y2DomainNum: null,
       width: 320,
       height: 240,
       padding: BASE_PADDING

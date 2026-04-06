@@ -230,6 +230,8 @@ export type Layout = {
   title?: string;
   xaxis?: Axis;
   yaxis?: Axis;
+  /** Secondary y-axis configuration. Rendered on the right side of the plot. */
+  yaxis2?: Axis;
   axes?: {
     x?: Axis;
     y?: Axis;
@@ -247,6 +249,8 @@ export type Visible = true | false | "legendonly";
 export type LineDashPattern = "solid" | "dash" | "dot" | "dashdot" | number[];
 export type LineSmoothingMode = "none" | "catmull-rom";
 
+export type TraceYAxisBinding = "y" | "y2";
+
 type TraceBase = {
   id?: string;
   name?: string;
@@ -254,6 +258,9 @@ type TraceBase = {
 
   x: ArrayLike<Datum>;
   y: ArrayLike<Datum>;
+
+  /** Bind this trace to the primary y-axis (`"y"`, default) or the secondary y-axis (`"y2"`). */
+  yaxis?: TraceYAxisBinding;
 
   hovertemplate?: string; // supports %{x} %{y} %{pointIndex} %{trace.name} and %{z} for heatmaps
 };
@@ -331,6 +338,8 @@ export type HistogramTrace = {
   name?: string;
   visible?: Visible;
   hovertemplate?: string;
+  /** Bind this trace to the primary y-axis (`"y"`, default) or the secondary y-axis (`"y2"`). */
+  yaxis?: TraceYAxisBinding;
 
   /** Raw data values. For orientation "v" (default): values to bin along the x-axis. */
   x?: ArrayLike<Datum>;
@@ -388,6 +397,8 @@ export type ChartPoint = {
   y: Datum;
   screenX: number; // CSS px in chart container coordinates
   screenY: number; // CSS px in chart container coordinates
+  /** Which y-axis this point belongs to (`"y"` or `"y2"`). */
+  yAxis?: TraceYAxisBinding;
 };
 
 export type ChartHoverEvent = {

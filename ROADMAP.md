@@ -1,6 +1,6 @@
 # Vertexa Chart 1.0 Roadmap
 
-Last updated: March 8, 2026
+Last updated: April 5, 2026
 
 ## Release assessment
 
@@ -22,7 +22,7 @@ I would not call the current codebase a 1.0 yet. It looks closer to a strong `0.
 | Platform | Ready | WebGPU-only, ESM-only, Node `>=20`, published as `@lineandvertexsoftware/vertexa-chart`. |
 | Rendering core | Ready | WebGPU marker + line pipelines, hover highlight, frame capture for export, LOD for marker-heavy scenes. |
 | Trace types | Ready | `scatter`, `bar`, `area`, `heatmap`, `histogram`. |
-| Axes | Partial | `linear`, `log`, `time`, and `category` axes exist, but only a single x-axis and single y-axis are supported. |
+| Axes | Ready | `linear`, `log`, `time`, and `category` axes; secondary y-axis (`yaxis2`) with per-trace binding. |
 | Layout and styling | Ready | Title, grid, legend, annotations, margins, theme, high-contrast theme defaults. |
 | Interaction | Ready | Zoom, pan, hover (`closest`, `x`, `y`, `none`), click, legend toggle, box select, lasso select, fit-to-data, autoscale-y, aspect lock. |
 | Programmatic API | Ready | `setTraces`, `appendPoints`, `setLayout`, `setSize`, `panBy`, `zoomBy`, `resetView`, `fitToData`, `autoscaleY`, `setAspectLock`, `setPerformanceMode`, `getPerformanceStats`, `destroy`. |
@@ -38,12 +38,12 @@ These are the main reasons I would hold back a `1.0.0` tag.
 
 ### 1. Missing common “core charting” features
 
-- No secondary y-axis (`yaxis2`) or per-trace axis binding
+- ~~No secondary y-axis (`yaxis2`) or per-trace axis binding~~ (shipped in 0.1.12)
 - No persistent interaction state (`uirevision`-style behavior) when traces/layout are reset
 - No built-in range slider or range selector
 - No subplots/faceting support
 
-Not every missing feature must be in 1.0, but `yaxis2` and interaction-state persistence are common enough that they materially affect whether the library feels “major-version complete.”
+Not every missing feature must be in 1.0, but interaction-state persistence is common enough that it materially affects whether the library feels “major-version complete.”
 
 ### 2. A few correctness and contract issues still need tightening
 
@@ -75,8 +75,8 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 - Define and test the CPU/GPU picking fallback behavior
 
 3. Add the missing “core dashboard” features
-- Secondary y-axis (`yaxis2`)
-- Per-trace axis binding
+- ~~Secondary y-axis (`yaxis2`)~~ (shipped in 0.1.12)
+- ~~Per-trace axis binding~~ (shipped in 0.1.12)
 - Persistent interaction state across `setTraces()` / `setLayout()` updates
 
 4. Harden tooltip and export behavior
@@ -124,7 +124,7 @@ Target: immediate next milestone
 
 Target: `1.0.0`
 
-- Add `yaxis2` and per-trace axis binding
+- ~~Add `yaxis2` and per-trace axis binding~~ (shipped in 0.1.12)
 - Add interaction-state persistence across layout/data updates
 - Tighten interaction correctness across all existing trace types
 - Publish a clean “supported features” matrix
@@ -156,7 +156,7 @@ Call the project `1.0` when all of the following are true:
 - The README describes the product that actually ships today
 - All currently advertised trace types and interactions behave correctly under test
 - There are no known unsupported “normal use” paths in the implemented feature set
-- Secondary-axis and state-persistence workflows exist
+- ~~Secondary-axis~~ (done) and state-persistence workflows exist
 - Release checks pass cleanly
 - The team is willing to preserve the documented API under semver
 
@@ -167,5 +167,5 @@ The codebase is already beyond a toy or prototype. It has enough substance to ju
 The shortest honest path to `1.0` is not “add lots more trace types.” It is:
 
 1. Harden the features already present
-2. Add secondary-axis and state-persistence support
+2. ~~Add secondary-axis~~ (done) and state-persistence support
 3. Tighten docs, tests, and release guarantees until the public contract is stable

@@ -1,4 +1,4 @@
-import type { AxisType, Datum, LineSmoothingMode, Trace } from "./types.js";
+import type { AxisType, Datum, LineSmoothingMode, Trace, TraceYAxisBinding } from "./types.js";
 import type { WebGPURenderer } from "@lineandvertexsoftware/renderer-webgpu";
 import {
   type DomainNum,
@@ -56,10 +56,14 @@ export class SceneCompiler {
   ySorted: { traceIndex: number; order: Uint32Array; ysNum: Float64Array }[] = [];
   xDomainNum: DomainNum = [0, 1];
   yDomainNum: DomainNum = [0, 1];
+  y2DomainNum: DomainNum | null = null;
+  traceYAxisBinding: Map<number, TraceYAxisBinding> = new Map();
   xCategories: string[] | null = null;
   yCategories: string[] | null = null;
+  y2Categories: string[] | null = null;
   private xCatMap: Map<string, number> = new Map();
   private yCatMap: Map<string, number> = new Map();
+  private y2CatMap: Map<string, number> = new Map();
 
   compile(
     traces: Trace[],
@@ -73,19 +77,36 @@ export class SceneCompiler {
 
     const xType = axisManager.resolveAxisType("x");
     const yType = axisManager.resolveAxisType("y");
+    const hasY2 = axisManager.hasY2Traces();
+    const y2Type = hasY2 ? axisManager.resolveAxisType("y2") : yType;
+
+    // Record per-trace y-axis binding for hover/pick lookups.
+    this.traceYAxisBinding.clear();
+    for (let i = 0; i < traces.length; i++) {
+      const binding = (traces[i] as { yaxis?: TraceYAxisBinding }).yaxis ?? "y";
+      this.traceYAxisBinding.set(i, binding);
+    }
 
     // Build category orders and maps (empty for non-category axes).
     this.xCategories = null;
     this.yCategories = null;
+    this.y2Categories = null;
     this.xCatMap = new Map();
     this.yCatMap = new Map();
+    this.y2CatMap = new Map();
     if (xType === "category") {
       this.xCategories = buildCategoryOrder(traces, "x", axisManager.getAxis("x")?.categories);
       this.xCatMap = makeCategoryMap(this.xCategories);
     }
     if (yType === "category") {
-      this.yCategories = buildCategoryOrder(traces, "y", axisManager.getAxis("y")?.categories);
+      const yTraces = traces.filter((t) => (t as { yaxis?: string }).yaxis !== "y2");
+      this.yCategories = buildCategoryOrder(yTraces, "y", axisManager.getAxis("y")?.categories);
       this.yCatMap = makeCategoryMap(this.yCategories);
+    }
+    if (hasY2 && y2Type === "category") {
+      const y2Traces = traces.filter((t) => (t as { yaxis?: string }).yaxis === "y2");
+      this.y2Categories = buildCategoryOrder(y2Traces, "y", axisManager.getAxis("y2")?.categories);
+      this.y2CatMap = makeCategoryMap(this.y2Categories);
     }
     validateCategoryConsistency(traces, xType, yType);
 
@@ -145,7 +166,14 @@ export class SceneCompiler {
 
     // compute domains from traces (include legendonly by default to keep axes stable)
     this.xDomainNum = computeAxisDomain(traces, "x", axisManager.getAxis("x"), xType, this.xCategories ?? undefined);
-    this.yDomainNum = computeAxisDomain(traces, "y", axisManager.getAxis("y"), yType, this.yCategories ?? undefined);
+
+    // Split y domain computation: y1 traces vs y2 traces
+    const y1Traces = hasY2 ? traces.filter((t) => (t as { yaxis?: string }).yaxis !== "y2") : traces;
+    const y2Traces = hasY2 ? traces.filter((t) => (t as { yaxis?: string }).yaxis === "y2") : [];
+    this.yDomainNum = computeAxisDomain(y1Traces, "y", axisManager.getAxis("y"), yType, this.yCategories ?? undefined);
+    this.y2DomainNum = hasY2
+      ? computeAxisDomain(y2Traces, "y", axisManager.getAxis("y2"), y2Type, this.y2Categories ?? undefined)
+      : null;
 
     // Extend domain to cover histogram bin extents and bar heights.
     for (const [, hd] of histogramData) {
@@ -200,8 +228,14 @@ export class SceneCompiler {
       // still keep legendonly in legend; just skip render
       if (!renderable) return;
 
+      // Resolve the y-domain and y-type for this trace (y1 vs y2).
+      const traceOnY2 = (trace as { yaxis?: string }).yaxis === "y2";
+      const traceYDomain = traceOnY2 && this.y2DomainNum ? this.y2DomainNum : this.yDomainNum;
+      const traceYType = traceOnY2 ? y2Type : yType;
+      const traceYCatMap = traceOnY2 ? this.y2CatMap : this.yCatMap;
+
       if (trace.type === "bar") {
-        const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum, this.xCatMap, this.yCatMap);
+        const points01 = normalizeInterleaved(trace.x, trace.y, xType, traceYType, this.xDomainNum, traceYDomain, this.xCatMap, traceYCatMap);
         const count = points01.length / 2;
         if (count <= 0) return;
 
@@ -229,7 +263,7 @@ export class SceneCompiler {
             adj[i * 2] = points01[i * 2] + xOffsetNorm;
             if (stackEntries) {
               const e = stackEntries[i];
-              adj[i * 2 + 1] = e ? normalizeScalarY(e.top, yType, this.yDomainNum) : points01[i * 2 + 1];
+              adj[i * 2 + 1] = e ? normalizeScalarY(e.top, traceYType, traceYDomain) : points01[i * 2 + 1];
             } else {
               adj[i * 2 + 1] = points01[i * 2 + 1];
             }
@@ -253,7 +287,7 @@ export class SceneCompiler {
         });
 
         // Build bar line segments with group offset and/or stack bases applied.
-        const defaultBaseYn = normalizeBarBaseY(trace, yType, this.yDomainNum);
+        const defaultBaseYn = normalizeBarBaseY(trace, traceYType, traceYDomain);
         const barPoints: number[] = [];
         for (let i = 0; i < count; i++) {
           const xn = points01[i * 2] + xOffsetNorm;
@@ -262,8 +296,8 @@ export class SceneCompiler {
           if (stackEntries) {
             const e = stackEntries[i];
             if (e) {
-              baseYn = normalizeScalarY(e.base, yType, this.yDomainNum);
-              topYn = normalizeScalarY(e.top, yType, this.yDomainNum);
+              baseYn = normalizeScalarY(e.base, traceYType, traceYDomain);
+              topYn = normalizeScalarY(e.top, traceYType, traceYDomain);
             } else {
               baseYn = defaultBaseYn;
               topYn = points01[i * 2 + 1];
@@ -360,7 +394,7 @@ export class SceneCompiler {
       }
 
       if (trace.type === "area") {
-        const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum, this.xCatMap, this.yCatMap);
+        const points01 = normalizeInterleaved(trace.x, trace.y, xType, traceYType, this.xDomainNum, traceYDomain, this.xCatMap, traceYCatMap);
         const count = points01.length / 2;
         if (count <= 0) return;
 
@@ -384,7 +418,7 @@ export class SceneCompiler {
           baseId
         });
 
-        const baseYn = normalizeAreaBaseY(trace, yType, this.yDomainNum);
+        const baseYn = normalizeAreaBaseY(trace, traceYType, traceYDomain);
         const fillPoints: number[] = [];
         for (let i = 0; i < count; i++) {
           const xn = points01[i * 2 + 0];
@@ -433,7 +467,7 @@ export class SceneCompiler {
         if (trace.bar?.widthPx != null) {
           barWidthPx = Math.max(1, trace.bar.widthPx);
         } else if (isH) {
-          const [yd0, yd1] = this.yDomainNum;
+          const [yd0, yd1] = traceYDomain;
           barWidthPx = yd1 > yd0 ? Math.max(1, (binSpan / (yd1 - yd0)) * plotH * 0.98) : DEFAULT_BAR_WIDTH_PX;
         } else {
           const [xd0, xd1] = this.xDomainNum;
@@ -443,8 +477,8 @@ export class SceneCompiler {
         // Normalize bin centres and values into [0,1] space.
         // For "v": x = centres, y = values.  For "h": x = values, y = centres.
         const points01 = isH
-          ? normalizeInterleaved(hd.binValues, hd.binCenters, xType, yType, this.xDomainNum, this.yDomainNum)
-          : normalizeInterleaved(hd.binCenters, hd.binValues, xType, yType, this.xDomainNum, this.yDomainNum);
+          ? normalizeInterleaved(hd.binValues, hd.binCenters, xType, traceYType, this.xDomainNum, traceYDomain)
+          : normalizeInterleaved(hd.binCenters, hd.binValues, xType, traceYType, this.xDomainNum, traceYDomain);
         const count = points01.length / 2;
         if (count <= 0) return;
 
@@ -480,7 +514,7 @@ export class SceneCompiler {
           }
         } else {
           // Vertical bars: from y=0 to y=binValue[i] at x=binCentre[i].
-          const baseYn = normalizeScalarY(0, yType, this.yDomainNum);
+          const baseYn = normalizeScalarY(0, traceYType, traceYDomain);
           for (let i = 0; i < nBins; i++) {
             const xn    = points01[i * 2];
             const topYn = points01[i * 2 + 1];
@@ -503,7 +537,7 @@ export class SceneCompiler {
 
       // scatter (default fallthrough — type narrowed to ScatterTrace here)
       const mode = trace.mode ?? "markers";
-      const points01 = normalizeInterleaved(trace.x, trace.y, xType, yType, this.xDomainNum, this.yDomainNum, this.xCatMap, this.yCatMap);
+      const points01 = normalizeInterleaved(trace.x, trace.y, xType, traceYType, this.xDomainNum, traceYDomain, this.xCatMap, traceYCatMap);
 
       const baseColor = getTraceColor(trace, traceIndex, theme.colors.palette);
 

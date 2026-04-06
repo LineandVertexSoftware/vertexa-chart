@@ -147,7 +147,7 @@ function buildExampleHref(exampleId: ExampleId) {
   const query = new URLSearchParams();
   if (highContrastMode) query.set("contrast", "1");
   query.set("example", exampleId);
-  return `/?${query.toString()}`;
+  return `?${query.toString()}`;
 }
 
 function linkBar(active: ExampleId) {
