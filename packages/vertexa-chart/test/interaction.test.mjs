@@ -300,6 +300,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     const chart = baseChart(Chart);
     Object.assign(chart, {
       container,
+      chartArea: elementStub(),
       canvas,
       svgGrid,
       svg,
@@ -308,7 +309,10 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       sceneCompiler: { markerNormLayers: [{ traceIndex: 0, points01: new Float32Array([0.1, 0.2]) }] },
       axisManager: { getHoverMode: () => "closest" },
       gridIndex: { scheduleRebuild: scheduleGridRebuild },
-      aspectLockEnabled: false
+      aspectLockEnabled: false,
+      rangeSliderConfig: { show: false, heightPx: 48, maskColor: "#e5e7eb", maskOpacity: 0.3, handleColor: "#9ca3af" },
+      rangeSlider: null,
+      rangeSliderContainer: null
     });
 
     chart.setSize(640, 480);

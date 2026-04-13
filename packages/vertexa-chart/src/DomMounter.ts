@@ -8,11 +8,13 @@ import { Toolbar } from "./Toolbar.js";
 
 export type MountedDom = {
   container: HTMLDivElement;
+  chartArea: HTMLDivElement;
   canvas: HTMLCanvasElement;
   svgGrid: SVGSVGElement;
   svg: SVGSVGElement;
   tooltip: HTMLDivElement;
   chartToolbar: Toolbar | null;
+  rangeSliderContainer: HTMLDivElement | null;
 };
 
 export type DomMountCallbacks = {
@@ -31,23 +33,37 @@ export function mountDom(
     theme: ResolvedChartTheme;
     a11y: ResolvedChartA11y;
     toolbarConfig: ResolvedChartToolbar;
+    rangeSliderHeightPx?: number;
   },
   callbacks: DomMountCallbacks,
   handleKeyDown: (e: KeyboardEvent) => void
 ): MountedDom {
   root.innerHTML = "";
 
+  const sliderH = opts.rangeSliderHeightPx ?? 0;
+  const totalHeight = opts.height + sliderH;
+
   const container = document.createElement("div");
   container.className = "chart-container";
   Object.assign(container.style, {
     position: "relative",
     width: `${opts.width}px`,
-    height: `${opts.height}px`,
+    height: `${totalHeight}px`,
     overflow: "hidden",
     background: opts.theme.colors.background,
     color: opts.theme.colors.text,
     fontFamily: opts.theme.fonts.family,
     fontSize: `${opts.theme.fonts.sizePx}px`
+  });
+
+  // Chart area holds the main canvas/SVG layers
+  const chartArea = document.createElement("div");
+  chartArea.className = "chart-area";
+  Object.assign(chartArea.style, {
+    position: "relative",
+    width: `${opts.width}px`,
+    height: `${opts.height}px`,
+    overflow: "hidden"
   });
   container.tabIndex = opts.a11y.keyboardNavigation ? 0 : -1;
   if (opts.a11y.keyboardNavigation) {
@@ -123,14 +139,28 @@ export function mountDom(
     zIndex: "1000"
   });
 
-  container.appendChild(svgGrid);
-  container.appendChild(canvas);
-  container.appendChild(svg);
-  container.appendChild(tooltip);
+  chartArea.appendChild(svgGrid);
+  chartArea.appendChild(canvas);
+  chartArea.appendChild(svg);
+  chartArea.appendChild(tooltip);
+  container.appendChild(chartArea);
+
+  // Range slider container (appended after chartArea so it sits below)
+  let rangeSliderContainer: HTMLDivElement | null = null;
+  if (sliderH > 0) {
+    rangeSliderContainer = document.createElement("div");
+    rangeSliderContainer.className = "chart-range-slider-slot";
+    Object.assign(rangeSliderContainer.style, {
+      position: "relative",
+      width: `${opts.width}px`,
+      height: `${sliderH}px`
+    });
+    container.appendChild(rangeSliderContainer);
+  }
 
   let chartToolbar: Toolbar | null = null;
   if (opts.toolbarConfig.show) {
-    chartToolbar = new Toolbar(container, opts.toolbarConfig, opts.theme, opts.a11y, {
+    chartToolbar = new Toolbar(chartArea, opts.toolbarConfig, opts.theme, opts.a11y, {
       exportPng: (o) => callbacks.exportPng(o),
       exportSvg: (o) => callbacks.exportSvg(o),
       exportCsvPoints: (o) => callbacks.exportCsvPoints(o),
@@ -141,5 +171,5 @@ export function mountDom(
 
   root.appendChild(container);
 
-  return { container, canvas, svgGrid, svg, tooltip, chartToolbar };
+  return { container, chartArea, canvas, svgGrid, svg, tooltip, chartToolbar, rangeSliderContainer };
 }

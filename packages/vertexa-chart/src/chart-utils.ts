@@ -11,6 +11,9 @@ import type {
   ChartToolbarPosition,
   ChartToolbarExportFormat,
   Datum,
+  RangeSliderOptions,
+  RangeSelectorOptions,
+  RangeSelectorPreset,
   Visible
 } from "./types.js";
 
@@ -573,4 +576,81 @@ export function catmullRom(p0: number, p1: number, p2: number, p3: number, t: nu
     (2 * p0 - 5 * p1 + 4 * p2 - p3) * t2 +
     (-p0 + 3 * p1 - 3 * p2 + p3) * t3
   );
+}
+
+// ----------------------------
+// Range slider / selector helpers
+// ----------------------------
+
+export type ResolvedRangeSlider = {
+  show: boolean;
+  heightPx: number;
+  maskColor: string;
+  maskOpacity: number;
+  handleColor: string;
+};
+
+export type ResolvedRangeSelector = {
+  show: boolean;
+  position: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  presets: RangeSelectorPreset[];
+};
+
+const DEFAULT_TIME_PRESETS: RangeSelectorPreset[] = [
+  { label: "1h", durationMs: 3_600_000 },
+  { label: "24h", durationMs: 86_400_000 },
+  { label: "7d", durationMs: 604_800_000 },
+  { label: "All", durationMs: null }
+];
+
+export function resolveRangeSlider(opts: RangeSliderOptions | undefined, theme: ResolvedChartTheme): ResolvedRangeSlider {
+  return {
+    show: opts?.show ?? false,
+    heightPx: clampToFinite(opts?.heightPx, 20, 200, 48),
+    maskColor: resolveString(opts?.maskColor, theme.colors.grid),
+    maskOpacity: clampToFinite(opts?.maskOpacity, 0, 1, 0.3),
+    handleColor: resolveString(opts?.handleColor, theme.colors.axis)
+  };
+}
+
+export function resolveRangeSelector(opts: RangeSelectorOptions | undefined, xAxisIsTime: boolean): ResolvedRangeSelector {
+  const show = opts?.show ?? false;
+  const pos = opts?.position ?? "top-left";
+  const position = (pos === "top-left" || pos === "top-right" || pos === "bottom-left" || pos === "bottom-right")
+    ? pos : "top-left";
+  const presets = opts?.presets && opts.presets.length > 0
+    ? opts.presets
+    : (xAxisIsTime ? DEFAULT_TIME_PRESETS : [{ label: "All", durationMs: null } as RangeSelectorPreset]);
+  return { show, position, presets };
+}
+
+/** Convert a normalized [0,1] window to a ZoomState {k, x, y}. */
+export function normalizedWindowToZoom(n0: number, n1: number, plotW: number, currentY: number): Zoom {
+  const span = Math.max(1e-9, n1 - n0);
+  const k = 1 / span;
+  const x = -n0 * plotW * k;
+  return { k, x, y: currentY };
+}
+
+/** Convert a ZoomState to a normalized [0,1] window. */
+export function zoomToNormalizedWindow(zoom: Zoom, plotW: number): [number, number] {
+  const k = Math.max(1e-6, zoom.k);
+  const n0 = -zoom.x / (plotW * k);
+  const n1 = n0 + 1 / k;
+  return [n0, n1];
+}
+
+/** Convert data-domain values to a normalized [0,1] position within the full domain. */
+export function datumToNormalized(value: number, domain: DomainNum, type: AxisType): number {
+  const [d0, d1] = domain;
+  if (type === "log") {
+    const l0 = Math.log10(d0);
+    const l1 = Math.log10(d1);
+    const span = l1 - l0;
+    if (span === 0) return 0.5;
+    return (Math.log10(value) - l0) / span;
+  }
+  const span = d1 - d0;
+  if (span === 0) return 0.5;
+  return (value - d0) / span;
 }

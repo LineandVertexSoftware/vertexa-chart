@@ -47,5 +47,8 @@ export type {
   LegendLayout,
   Margin,
   Datum,
-  TraceYAxisBinding
+  TraceYAxisBinding,
+  RangeSliderOptions,
+  RangeSelectorOptions,
+  RangeSelectorPreset
 } from "./types.js";

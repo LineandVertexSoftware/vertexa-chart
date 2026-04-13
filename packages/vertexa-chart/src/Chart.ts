@@ -18,6 +18,7 @@ import type {
   ChartPublicApi,
   ChartViewTransform,
   ChartZoomEvent,
+  Datum,
   Layout,
   Trace,
   Visible
@@ -26,18 +27,28 @@ import {
   type ResolvedChartTheme,
   type ResolvedChartA11y,
   type ResolvedChartToolbar,
+  type ResolvedRangeSlider,
+  type ResolvedRangeSelector,
   resolveChartA11y,
   resolveChartTheme,
   resolveChartToolbar,
+  resolveRangeSlider,
+  resolveRangeSelector,
+  normalizedWindowToZoom,
+  zoomToNormalizedWindow,
+  datumToNormalized,
   normalizeMaxPoints,
   toMutableDatumArray,
   toNumber,
   fromAxisNumber,
+  fromNormalizedDomain,
   axisSpan,
   lockAxisSpan,
   stripAxisBounds,
   isTextEntryElement
 } from "./chart-utils.js";
+import { RangeSlider } from "./RangeSlider.js";
+import { RangeSelector } from "./RangeSelector.js";
 import {
   computeAxisDomain,
   getTraceColor
@@ -105,7 +116,17 @@ export class Chart implements ChartPublicApi {
   private onSelectHook?: ChartOptions["onSelect"];
   private tooltipFormatter?: NonNullable<ChartOptions["tooltip"]>["formatter"];
   private tooltipRenderer?: NonNullable<ChartOptions["tooltip"]>["renderer"];
+  private onRangeChangeHook?: ChartOptions["onRangeChange"];
   private handleContainerKeyDown = (event: KeyboardEvent) => this.onContainerKeyDown(event);
+
+  // Range slider + selector
+  private rangeSlider: RangeSlider | null = null;
+  private rangeSelector: RangeSelector | null = null;
+  private rangeSliderConfig: ResolvedRangeSlider;
+  private rangeSelectorConfig: ResolvedRangeSelector;
+  private rangeSliderContainer: HTMLDivElement | null = null;
+  private chartArea!: HTMLDivElement;
+  private syncingFromSlider = false;
 
   private zoom = { k: 1, x: 0, y: 0 };
   private dpr = Math.max(1, window.devicePixelRatio || 1);
@@ -190,6 +211,10 @@ export class Chart implements ChartPublicApi {
     this.onSelectHook = opts.onSelect;
     this.tooltipFormatter = opts.tooltip?.formatter;
     this.tooltipRenderer = opts.tooltip?.renderer;
+    this.onRangeChangeHook = opts.onRangeChange;
+
+    this.rangeSliderConfig = resolveRangeSlider(this.layout.rangeSlider, this.theme);
+    this.rangeSelectorConfig = resolveRangeSelector(this.layout.rangeSelector, this.axisManager.resolveAxisType("x") === "time");
 
     this.pickingEngine = new PickingEngine(
       this.sceneCompiler,
@@ -291,6 +316,29 @@ export class Chart implements ChartPublicApi {
       }
     });
 
+    // Range selector (buttons)
+    if (this.rangeSelectorConfig.show) {
+      this.rangeSelector = new RangeSelector(
+        this.chartArea,
+        this.rangeSelectorConfig,
+        this.theme,
+        (preset) => this.onRangeSelectorPreset(preset)
+      );
+    }
+
+    // Range slider (mini overview)
+    if (this.rangeSliderConfig.show && this.rangeSliderContainer) {
+      this.rangeSlider = new RangeSlider(this.rangeSliderContainer, {
+        width: this.width,
+        heightPx: this.rangeSliderConfig.heightPx,
+        padding: this.padding,
+        theme: this.theme,
+        config: this.rangeSliderConfig,
+        onRangeChange: (n0, n1) => this.onSliderRangeChange(n0, n1)
+      });
+      this.updateRangeSliderChart();
+    }
+
     this.initialized = true;
     this.render();
   }
@@ -320,6 +368,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
     this.overlay.setLegend(this.axisManager.isLegendVisible() ? this.makeLegendItems() : [], (i) => this.toggleTrace(i));
 
+    this.updateRangeSliderChart();
     this.scheduleGridIndexRebuild();
     this.render();
   }
@@ -576,8 +625,11 @@ export class Chart implements ChartPublicApi {
     this.assertActive("setSize");
     this.width = width;
     this.height = height;
+    const sliderH = this.rangeSliderConfig.show ? this.rangeSliderConfig.heightPx : 0;
     this.container.style.width = `${width}px`;
-    this.container.style.height = `${height}px`;
+    this.container.style.height = `${height + sliderH}px`;
+    this.chartArea.style.width = `${width}px`;
+    this.chartArea.style.height = `${height}px`;
 
     this.canvas.style.width = `${width}px`;
     this.canvas.style.height = `${height}px`;
@@ -593,6 +645,11 @@ export class Chart implements ChartPublicApi {
     if (!this.initialized) return;
 
     this.overlay.setSize(width, height, this.padding);
+    this.rangeSlider?.setSize(width);
+    if (this.rangeSliderContainer) {
+      this.rangeSliderContainer.style.width = `${width}px`;
+    }
+    this.updateRangeSliderChart();
     this.render();
 
     this.scheduleGridIndexRebuild();
@@ -775,6 +832,10 @@ export class Chart implements ChartPublicApi {
     this.sceneCompiler.ySorted = [];
     this.sceneCompiler.traceData = [];
     this.initialized = false;
+    this.rangeSlider?.destroy();
+    this.rangeSlider = null;
+    this.rangeSelector?.destroy();
+    this.rangeSelector = null;
     this.container.removeEventListener("keydown", this.handleContainerKeyDown);
     this.chartToolbar?.cleanup();
     if (document.fullscreenElement === this.container) {
@@ -808,6 +869,7 @@ export class Chart implements ChartPublicApi {
       | "autoscaleY"
       | "setAspectLock"
       | "setPerformanceMode"
+      | "setXRange"
   ) {
     if (this.destroyed) {
       throw new Error(`Chart.${method}() called after destroy().`);
@@ -834,6 +896,109 @@ export class Chart implements ChartPublicApi {
 
 
 
+  // ----------------------------
+  // Range slider / selector
+  // ----------------------------
+
+  private onSliderRangeChange(n0: number, n1: number) {
+    this.syncingFromSlider = true;
+    const plotW = Math.max(1, this.width - this.padding.l - this.padding.r);
+    const z = normalizedWindowToZoom(n0, n1, plotW, this.zoom.y);
+    const applied = this.overlay.setZoomTransform(z, { emitOnZoom: false });
+    if (applied) {
+      this.applyZoomChange(applied, "immediate");
+    }
+    this.rangeSelector?.clearActive();
+    this.fireRangeChangeHook();
+    this.syncingFromSlider = false;
+  }
+
+  private onRangeSelectorPreset(preset: { label: string; durationMs: number | null }) {
+    if (preset.durationMs === null) {
+      this.fitToData();
+      this.rangeSelector?.setActivePreset(preset.label);
+      return;
+    }
+
+    const xType = this.axisManager.resolveAxisType("x");
+    const [xd0, xd1] = this.sceneCompiler.xDomainNum;
+    const dataX1 = xd1;
+    const dataX0 = dataX1 - preset.durationMs;
+    const n0 = datumToNormalized(dataX0, this.sceneCompiler.xDomainNum, xType);
+    const n1 = datumToNormalized(dataX1, this.sceneCompiler.xDomainNum, xType);
+
+    const plotW = Math.max(1, this.width - this.padding.l - this.padding.r);
+    const z = normalizedWindowToZoom(
+      Math.max(0, n0),
+      Math.min(1, n1),
+      plotW,
+      this.zoom.y
+    );
+    const applied = this.overlay.setZoomTransform(z, { emitOnZoom: false });
+    if (applied) {
+      this.applyZoomChange(applied, "immediate");
+      this.syncSliderFromZoom();
+    }
+    this.rangeSelector?.setActivePreset(preset.label);
+    this.fireRangeChangeHook();
+  }
+
+  private syncSliderFromZoom() {
+    if (!this.rangeSlider || this.syncingFromSlider) return;
+    const plotW = Math.max(1, this.width - this.padding.l - this.padding.r);
+    const [n0, n1] = zoomToNormalizedWindow(this.zoom, plotW);
+    this.rangeSlider.setWindow(n0, n1);
+  }
+
+  private updateRangeSliderChart() {
+    if (!this.rangeSlider) return;
+    const xType = this.axisManager.resolveAxisType("x");
+    const yType = this.axisManager.resolveAxisType("y");
+    this.rangeSlider.setPadding(this.padding);
+    this.rangeSlider.renderMiniChart(
+      this.traces,
+      this.sceneCompiler.xDomainNum,
+      xType,
+      yType,
+      this.theme
+    );
+  }
+
+  private fireRangeChangeHook() {
+    if (!this.onRangeChangeHook) return;
+    const xType = this.axisManager.resolveAxisType("x");
+    const [v0, v1] = this.axisManager.getVisibleAxisRangeNum("x");
+    this.onRangeChangeHook({
+      x0: fromAxisNumber(v0, xType),
+      x1: fromAxisNumber(v1, xType)
+    });
+  }
+
+  setXRange(x0: Datum, x1: Datum) {
+    this.assertActive("setXRange");
+    if (!this.initialized) return;
+
+    const xType = this.axisManager.resolveAxisType("x");
+    const v0 = toNumber(x0, xType);
+    const v1 = toNumber(x1, xType);
+    const n0 = datumToNormalized(v0, this.sceneCompiler.xDomainNum, xType);
+    const n1 = datumToNormalized(v1, this.sceneCompiler.xDomainNum, xType);
+
+    const plotW = Math.max(1, this.width - this.padding.l - this.padding.r);
+    const z = normalizedWindowToZoom(
+      Math.max(0, n0),
+      Math.min(1, n1),
+      plotW,
+      this.zoom.y
+    );
+    const applied = this.overlay.setZoomTransform(z, { emitOnZoom: false });
+    if (applied) {
+      this.applyZoomChange(applied, "immediate");
+      this.syncSliderFromZoom();
+    }
+    this.rangeSelector?.clearActive();
+  }
+
   private makeY2AxisSpec() {
     if (!this.axisManager.hasY2Traces() || !this.sceneCompiler.y2DomainNum) return undefined;
     const y2Type = this.axisManager.resolveAxisType("y2");
@@ -859,6 +1024,7 @@ export class Chart implements ChartPublicApi {
       this.render();
     }
     this.scheduleGridIndexRebuild();
+    this.syncSliderFromZoom();
     this.onZoomHook?.(z satisfies ChartZoomEvent);
   }
 
@@ -1064,9 +1230,17 @@ export class Chart implements ChartPublicApi {
   // ----------------------------
 
   private mountDom() {
+    const sliderH = this.rangeSliderConfig.show ? this.rangeSliderConfig.heightPx : 0;
     const dom = mountDom(
       this.root,
-      { width: this.width, height: this.height, theme: this.theme, a11y: this.a11y, toolbarConfig: this.toolbarConfig },
+      {
+        width: this.width,
+        height: this.height,
+        theme: this.theme,
+        a11y: this.a11y,
+        toolbarConfig: this.toolbarConfig,
+        rangeSliderHeightPx: sliderH
+      },
       {
         exportPng: (opts) => this.exportPng(opts),
         exportSvg: (opts) => this.exportSvg(opts),
@@ -1077,11 +1251,13 @@ export class Chart implements ChartPublicApi {
       this.handleContainerKeyDown
     );
     this.container = dom.container;
+    this.chartArea = dom.chartArea;
     this.canvas = dom.canvas;
     this.svgGrid = dom.svgGrid;
     this.svg = dom.svg;
     this.tooltip = dom.tooltip;
     this.chartToolbar = dom.chartToolbar;
+    this.rangeSliderContainer = dom.rangeSliderContainer;
     this.applyAriaAttributes();
   }
 }
@@ -1097,6 +1273,8 @@ function mergeLayoutPatch(current: Layout, patch: Partial<Layout>): Layout {
   if (hasOwn(patch, "margin")) next.margin = mergeObject(current.margin, patch.margin);
   if (hasOwn(patch, "axes")) next.axes = mergeAxes(current.axes, patch.axes);
   if (hasOwn(patch, "annotations")) next.annotations = patch.annotations ? [...patch.annotations] : patch.annotations;
+  if (hasOwn(patch, "rangeSlider")) next.rangeSlider = mergeObject(current.rangeSlider, patch.rangeSlider);
+  if (hasOwn(patch, "rangeSelector")) next.rangeSelector = mergeObject(current.rangeSelector, patch.rangeSelector);
 
   return next;
 }

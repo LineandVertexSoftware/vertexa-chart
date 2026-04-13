@@ -226,6 +226,35 @@ export type Margin = {
   left?: number;
 };
 
+export type RangeSliderOptions = {
+  /** Show the mini overview range slider below the chart. Default: false. */
+  show?: boolean;
+  /** Height of the slider area in CSS px. Default: 48. */
+  heightPx?: number;
+  /** Background color of the unselected region. Default: theme-derived. */
+  maskColor?: string;
+  /** Opacity of the unselected mask. Default: 0.3. */
+  maskOpacity?: number;
+  /** Border color of the selection window. Default: theme axis color. */
+  handleColor?: string;
+};
+
+export type RangeSelectorPreset = {
+  /** Button label, e.g. "1h", "24h", "7d", "All". */
+  label: string;
+  /** Duration in milliseconds. null means "show all data". */
+  durationMs: number | null;
+};
+
+export type RangeSelectorOptions = {
+  /** Show the range selector buttons. Default: false. */
+  show?: boolean;
+  /** Position of the button row. Default: "top-left". */
+  position?: "top-left" | "top-right" | "bottom-left" | "bottom-right";
+  /** Preset buttons. Default: [1h, 24h, 7d, All] when axis is time. */
+  presets?: RangeSelectorPreset[];
+};
+
 export type Layout = {
   title?: string;
   xaxis?: Axis;
@@ -242,6 +271,8 @@ export type Layout = {
   annotations?: Annotation[];
   legend?: LegendLayout;
   margin?: Margin;
+  rangeSlider?: RangeSliderOptions;
+  rangeSelector?: RangeSelectorOptions;
 };
 
 export type Visible = true | false | "legendonly";
@@ -745,6 +776,11 @@ export interface ChartPublicApi {
   getPerformanceStats(): ChartPerformanceStats;
 
   /**
+   * Programmatically set the visible x-range to the given data-domain values.
+   */
+  setXRange(x0: Datum, x1: Datum): void;
+
+  /**
    * Release resources and detach the chart from the DOM.
    *
    * Idempotent: repeated calls are safe.
@@ -779,4 +815,5 @@ export type ChartOptions = {
   onSelect?: (event: ChartSelectionEvent) => void;
   tooltip?: ChartTooltipOptions;
   toolbar?: ChartToolbarOptions;
+  onRangeChange?: (range: { x0: Datum; x1: Datum }) => void;
 };
