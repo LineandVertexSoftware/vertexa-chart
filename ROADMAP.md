@@ -1,6 +1,6 @@
 # Vertexa Chart 1.0 Roadmap
 
-Last updated: April 5, 2026
+Last updated: April 13, 2026
 
 ## Release assessment
 
@@ -40,7 +40,7 @@ These are the main reasons I would hold back a `1.0.0` tag.
 
 - ~~No secondary y-axis (`yaxis2`) or per-trace axis binding~~ (shipped in 0.1.12)
 - No persistent interaction state (`uirevision`-style behavior) when traces/layout are reset
-- No built-in range slider or range selector
+- ~~No built-in range slider or range selector~~ (shipped in 0.1.13)
 - No subplots/faceting support
 
 Not every missing feature must be in 1.0, but interaction-state persistence is common enough that it materially affects whether the library feels “major-version complete.”
@@ -90,7 +90,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 
 ### P1: Strong candidates for 1.0 if the target user is dashboard/product teams
 
-- Range slider + range selector
+- ~~Range slider + range selector~~ (shipped in 0.1.13)
 - Unified hover / shared crosshair mode for dense time series
 - Mobile gesture hardening
 - User-facing decimation or downsampling controls
@@ -142,7 +142,7 @@ Target: `1.0.0-rc`
 
 Target: `1.1.x` and later
 
-- Range controls
+- ~~Range controls~~ (shipped in 0.1.13)
 - Unified hover
 - Error bars
 - Financial traces

@@ -118,6 +118,7 @@ new Chart(element: Element, options: ChartOptions)
 | `onZoom` | `(e: ChartZoomEvent) => void` | Zoom/pan change |
 | `onLegendToggle` | `(e: ChartLegendToggleEvent) => void` | Legend item click |
 | `onSelect` | `(e: ChartSelectionEvent) => void` | Box/lasso selection complete |
+| `onRangeChange` | `(range: { x0: Datum; x1: Datum }) => void` | Fires when the visible x-range changes via slider, selector, or `setXRange()` |
 | `tooltip` | `TooltipOptions` | Custom `formatter` or `renderer` function |
 
 ### Instance methods
@@ -138,14 +139,15 @@ new Chart(element: Element, options: ChartOptions)
 | `setAspectLock(enabled)` | Lock equal-unit aspect ratio |
 | `setPerformanceMode(mode)` | `"quality" \| "balanced" \| "max-fps"` |
 | `getPerformanceStats()` | Returns `{ fps, renderMs, gpuRenderMs, pickMs, sampledPoints }` |
+| `setXRange(x0, x1)` | Jump to a specific x-range — accepts numbers, `Date`s, or ISO strings depending on axis type |
 | `exportPng(options?)` | Export current view as PNG — `Promise<Blob>` |
 | `exportSvg(options?)` | Export current view as SVG — `Promise<Blob>` |
 | `exportCsvPoints(options?)` | Export chart data as CSV — `Blob` |
 | `destroy()` | Release all GPU and DOM resources |
 
-`setLayout()` merges the provided patch into the current layout. Nested objects such as
-`xaxis`, `yaxis`, `grid`, `legend`, and `margin` are shallow-merged; arrays such as
-`annotations` replace the previous value.
+`setLayout()` merges the provided patch into the current layout. Nested objects like
+`xaxis`, `yaxis`, `grid`, `legend`, `margin`, `rangeSlider`, and `rangeSelector` are
+shallow-merged; arrays like `annotations` replace the previous value.
 
 ### Keyboard shortcuts
 
@@ -187,6 +189,49 @@ layout: {
   ]
 }
 ```
+
+### Range slider and range selector
+
+If you're building dashboards with time-series data (or any chart where users need to
+zoom into a specific window), the range slider and range selector make that easy without
+writing custom zoom logic.
+
+The **range slider** renders a small overview of your data below the chart. Users drag a
+selection window to control which portion of the x-axis is visible. The **range selector**
+adds preset buttons (like "1h", "7d", "All") that jump to common time windows.
+
+```ts
+layout: {
+  // Mini overview slider below the chart
+  rangeSlider: {
+    show: true,
+    heightPx: 48,         // default 48
+    maskColor: "#e5e7eb", // dimmed-out region color (defaults to theme grid color)
+    maskOpacity: 0.3,     // how opaque the dimmed regions are
+    handleColor: "#9ca3af" // border and drag-handle color
+  },
+
+  // Preset buttons for quick time jumps
+  rangeSelector: {
+    show: true,
+    position: "top-left", // "top-left" | "top-right" | "bottom-left" | "bottom-right"
+    presets: [
+      { label: "1h",  durationMs: 3_600_000 },
+      { label: "24h", durationMs: 86_400_000 },
+      { label: "7d",  durationMs: 604_800_000 },
+      { label: "All", durationMs: null }   // null = fit to full data range
+    ]
+  }
+}
+```
+
+When the x-axis is set to `"time"`, the range selector defaults to sensible presets
+(1h, 24h, 7d, All) even if you don't specify them. For non-time axes you just get an
+"All" button unless you provide your own presets.
+
+Both controls stay in sync with the main chart — zooming or panning the chart updates the
+slider, and dragging the slider updates the chart. Use `onRangeChange` to react to
+changes, or call `setXRange(x0, x1)` to drive it programmatically.
 
 ---
 
