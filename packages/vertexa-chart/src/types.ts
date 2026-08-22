@@ -255,8 +255,15 @@ export type RangeSelectorOptions = {
   presets?: RangeSelectorPreset[];
 };
 
+export type UIRevision = string | number | boolean;
+
 export type Layout = {
   title?: string;
+  /**
+   * Preserve user interaction state across `setTraces()` and `setLayout()` while
+   * this value is unchanged. Change it to intentionally reset zoom/pan state.
+   */
+  uirevision?: UIRevision;
   xaxis?: Axis;
   yaxis?: Axis;
   /** Secondary y-axis configuration. Rendered on the right side of the plot. */

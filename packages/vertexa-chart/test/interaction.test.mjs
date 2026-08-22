@@ -774,6 +774,124 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     assert.equal(render.calls.length, 1);
   });
 
+  await t.test("setTraces preserves visible data range when uirevision is unchanged", () => {
+    const setLayers = spy();
+    const setAxes = spy();
+    const setGrid = spy();
+    const setAnnotations = spy();
+    const setLegend = spy();
+    const setZoomTransform = spy((transform) => transform);
+    const render = spy();
+    const chart = baseChart(Chart);
+
+    Object.assign(chart, {
+      layout: { uirevision: "dashboard" },
+      zoom: { k: 2, x: -80, y: -40 },
+      sceneCompiler: {
+        xDomainNum: [0, 100],
+        yDomainNum: [0, 100],
+        y2DomainNum: null,
+        xCategories: null,
+        yCategories: null,
+        markerNormLayers: [],
+        compile: spy(() => {
+          chart.sceneCompiler.xDomainNum = [0, 200];
+          chart.sceneCompiler.yDomainNum = [0, 200];
+          return { markers: [], lines: [] };
+        })
+      },
+      renderer: { setLayers },
+      axisManager: {
+        getHoverMode: () => "closest",
+        getVisibleAxisRangeNum: (which) => {
+          const domain = which === "x" ? chart.sceneCompiler.xDomainNum : chart.sceneCompiler.yDomainNum;
+          const plotSize = which === "x"
+            ? chart.width - chart.padding.l - chart.padding.r
+            : chart.height - chart.padding.t - chart.padding.b;
+          const translate = which === "x" ? chart.zoom.x : chart.zoom.y;
+          const k = chart.zoom.k;
+          const n0 = (0 - translate) / (plotSize * k);
+          const n1 = (plotSize - translate) / (plotSize * k);
+          return [
+            domain[0] + (domain[1] - domain[0]) * n0,
+            domain[0] + (domain[1] - domain[0]) * n1
+          ];
+        },
+        resolveAxisType: () => "linear",
+        makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
+        resolveOverlayGrid: () => ({ show: true }),
+        makeOverlayAnnotations: () => [],
+        isLegendVisible: () => false,
+        hasY2Traces: () => false
+      },
+      overlay: { setAxes, setGrid, setAnnotations, setLegend, setZoomTransform },
+      gridIndex: { reset: spy() },
+      render
+    });
+
+    chart.setTraces([{ type: "scatter", x: [0, 200], y: [0, 200] }]);
+
+    assert.equal(setZoomTransform.calls.length, 1);
+    assert.deepEqual(setZoomTransform.calls[0][1], { emitOnZoom: false });
+    assert.equal(setZoomTransform.calls[0][0].k, 4);
+    assert.equal(Math.round(setZoomTransform.calls[0][0].x), -80);
+    assert.equal(Math.round(setZoomTransform.calls[0][0].y), -40);
+    assert.deepEqual(chart.zoom, setZoomTransform.calls[0][0]);
+    assert.equal(render.calls.length, 1);
+  });
+
+  await t.test("setLayout resets zoom when uirevision changes", () => {
+    const compile = spy(() => ({ markers: [], lines: [] }));
+    const setZoomTransform = spy((transform) => transform);
+    const render = spy();
+    const chart = baseChart(Chart);
+
+    Object.assign(chart, {
+      layout: { uirevision: "one" },
+      zoom: { k: 3, x: -120, y: -40 },
+      basePadding: BASE_PADDING,
+      applyAriaAttributes: spy(),
+      sceneCompiler: {
+        compile,
+        xDomainNum: [0, 100],
+        yDomainNum: [0, 100],
+        y2DomainNum: null,
+        xCategories: null,
+        yCategories: null,
+        markerNormLayers: []
+      },
+      renderer: { setLayers: spy() },
+      axisManager: {
+        getHoverMode: () => "closest",
+        getVisibleAxisRangeNum: () => [10, 60],
+        resolveLayoutPadding: () => BASE_PADDING,
+        resolveAxisType: () => "linear",
+        makeOverlayAxisSpec: () => ({ type: "linear", domain: [0, 1] }),
+        resolveOverlayGrid: () => ({ show: true }),
+        makeOverlayAnnotations: () => [],
+        isLegendVisible: () => false,
+        hasY2Traces: () => false
+      },
+      overlay: {
+        setSize: spy(),
+        setAxes: spy(),
+        setGrid: spy(),
+        setAnnotations: spy(),
+        setLegend: spy(),
+        setZoomTransform
+      },
+      gridIndex: { reset: spy() },
+      render
+    });
+
+    chart.setLayout({ uirevision: "two" });
+
+    assert.equal(setZoomTransform.calls.length, 1);
+    assert.deepEqual(setZoomTransform.calls[0], [{ k: 1, x: 0, y: 0 }, { emitOnZoom: false }]);
+    assert.deepEqual(chart.zoom, { k: 1, x: 0, y: 0 });
+    assert.equal(render.calls.length, 1);
+  });
+
   await t.test("appendPoints appends incrementally and applies sliding window", () => {
     const rendererSetLayers = spy();
     const setAxes = spy();

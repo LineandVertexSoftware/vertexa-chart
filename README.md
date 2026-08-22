@@ -149,6 +149,11 @@ new Chart(element: Element, options: ChartOptions)
 `xaxis`, `yaxis`, `grid`, `legend`, `margin`, `rangeSlider`, and `rangeSelector` are
 shallow-merged; arrays like `annotations` replace the previous value.
 
+Set `layout.uirevision` to preserve user zoom/pan state across `setTraces()` and
+`setLayout()` updates. While the value is unchanged, Vertexa Chart keeps the
+current visible data window when domains are recomputed. Change the value to
+intentionally reset zoom/pan state.
+
 ### Keyboard shortcuts
 
 When the chart container has focus:
@@ -171,6 +176,7 @@ When the chart container has focus:
 ```ts
 layout: {
   title: "My chart",
+  uirevision: "dashboard-v1",
   hovermode: "closest",       // "closest" | "x" | "y" | "none"
   xaxis: {
     type: "linear",           // "linear" | "log" | "time"

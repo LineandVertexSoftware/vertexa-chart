@@ -70,6 +70,12 @@ const QUALITY_INTERACTION_LOD_TRIGGER_POINTS = 750_000;
 const QUALITY_INTERACTION_LOD_TARGET_POINTS = 250_000;
 const QUALITY_INTERACTION_LOD_IDLE_MS = 180;
 
+type InteractionStateSnapshot = {
+  revision: Layout["uirevision"];
+  xRange: [number, number];
+  yRange: [number, number];
+};
+
 /**
  * High-performance chart component with a frozen, minimal public API.
  *
@@ -352,6 +358,7 @@ export class Chart implements ChartPublicApi {
    */
   setTraces(traces: Trace[]) {
     this.assertActive("setTraces");
+    const interactionState = this.captureInteractionState(this.layout.uirevision);
     this.traces = traces.map((t) => this.toRuntimeTrace(t));
     if (!this.initialized) return;
 
@@ -369,6 +376,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
     this.overlay.setLegend(this.axisManager.isLegendVisible() ? this.makeLegendItems() : [], (i) => this.toggleTrace(i));
 
+    this.restoreInteractionState(interactionState, this.layout.uirevision);
     this.updateRangeSliderChart();
     this.scheduleGridIndexRebuild();
     this.render();
@@ -500,6 +508,7 @@ export class Chart implements ChartPublicApi {
    */
   setLayout(layout: Partial<Layout>) {
     this.assertActive("setLayout");
+    const interactionState = this.captureInteractionState(this.layout.uirevision);
     this.layout = mergeLayoutPatch(this.layout, layout);
     this.padding = this.axisManager.resolveLayoutPadding(this.layout, this.basePadding);
     this.applyAriaAttributes();
@@ -520,6 +529,7 @@ export class Chart implements ChartPublicApi {
     this.overlay.setAnnotations(this.axisManager.makeOverlayAnnotations(xType, yType));
     this.overlay.setLegend(this.axisManager.isLegendVisible() ? this.makeLegendItems() : [], (i) => this.toggleTrace(i));
 
+    this.restoreInteractionState(interactionState, this.layout.uirevision);
     this.scheduleGridIndexRebuild();
     this.render();
   }
@@ -897,6 +907,73 @@ export class Chart implements ChartPublicApi {
       customdata: this.copyTraceCustomData(trace.customdata),
       text: this.copyTraceText(trace.text)
     };
+  }
+
+  private captureInteractionState(revision: Layout["uirevision"]): InteractionStateSnapshot | null {
+    if (!this.initialized || revision == null) return null;
+    return {
+      revision,
+      xRange: this.axisManager.getVisibleAxisRangeNum("x"),
+      yRange: this.axisManager.getVisibleAxisRangeNum("y")
+    };
+  }
+
+  private restoreInteractionState(snapshot: InteractionStateSnapshot | null, nextRevision: Layout["uirevision"]) {
+    if (!this.initialized || !this.overlay || nextRevision == null) return;
+
+    if (!snapshot) return;
+    if (!Object.is(snapshot.revision, nextRevision)) {
+      this.applyOverlayZoomTransform({ k: 1, x: 0, y: 0 });
+      return;
+    }
+
+    const preserved = this.viewRangesToZoom(snapshot.xRange, snapshot.yRange);
+    if (!preserved) return;
+    this.applyOverlayZoomTransform(preserved);
+  }
+
+  private viewRangesToZoom(xRange: [number, number], yRange: [number, number]) {
+    const xType = this.axisManager.resolveAxisType("x");
+    const yType = this.axisManager.resolveAxisType("y");
+    const [x0, x1] = this.sortedFiniteRange(xRange);
+    const [y0] = this.sortedFiniteRange(yRange);
+    if (x0 == null || x1 == null || y0 == null) return null;
+
+    const xN0 = this.clamp01(datumToNormalized(x0, this.sceneCompiler.xDomainNum, xType));
+    const xN1 = this.clamp01(datumToNormalized(x1, this.sceneCompiler.xDomainNum, xType));
+    const yN0 = this.clamp01(datumToNormalized(y0, this.sceneCompiler.yDomainNum, yType));
+
+    const xSpan = xN1 - xN0;
+    if (!Number.isFinite(xSpan) || xSpan <= 1e-9) return null;
+
+    const plotW = Math.max(1, this.width - this.padding.l - this.padding.r);
+    const plotH = Math.max(1, this.height - this.padding.t - this.padding.b);
+    const k = 1 / xSpan;
+    return {
+      k,
+      x: -xN0 * plotW * k,
+      y: -yN0 * plotH * k
+    };
+  }
+
+  private applyOverlayZoomTransform(transform: ChartViewTransform) {
+    const applied = this.overlay.setZoomTransform(transform, { emitOnZoom: false });
+    if (!applied) return;
+    this.zoom = applied;
+    this.syncSliderFromZoom();
+  }
+
+  private sortedFiniteRange(range: [number, number]): [number, number] | [null, null] {
+    const [a, b] = range;
+    if (!Number.isFinite(a) || !Number.isFinite(b)) return [null, null];
+    return a <= b ? [a, b] : [b, a];
+  }
+
+  private clamp01(value: number) {
+    if (!Number.isFinite(value)) return 0;
+    if (value < 0) return 0;
+    if (value > 1) return 1;
+    return value;
   }
 
   private copyTraceCustomData(customdata: Trace["customdata"]): Trace["customdata"] {

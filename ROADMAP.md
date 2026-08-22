@@ -39,11 +39,11 @@ These are the main reasons I would hold back a `1.0.0` tag.
 ### 1. Missing common “core charting” features
 
 - ~~No secondary y-axis (`yaxis2`) or per-trace axis binding~~ (shipped in 0.1.12)
-- No persistent interaction state (`uirevision`-style behavior) when traces/layout are reset
+- ~~No persistent interaction state (`uirevision`-style behavior) when traces/layout are reset~~ (shipped)
 - ~~No built-in range slider or range selector~~ (shipped in 0.1.13)
 - No subplots/faceting support
 
-Not every missing feature must be in 1.0, but interaction-state persistence is common enough that it materially affects whether the library feels “major-version complete.”
+Not every missing feature must be in 1.0, but the remaining gaps still affect whether the library feels “major-version complete.”
 
 ### 2. A few correctness and contract issues still need tightening
 
@@ -79,7 +79,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 3. Add the missing “core dashboard” features
 - ~~Secondary y-axis (`yaxis2`)~~ (shipped in 0.1.12)
 - ~~Per-trace axis binding~~ (shipped in 0.1.12)
-- Persistent interaction state across `setTraces()` / `setLayout()` updates
+- ~~Persistent interaction state across `setTraces()` / `setLayout()` updates~~ (shipped)
 
 4. Harden tooltip and export behavior
 - ~~Either sanitize custom tooltip HTML or document `tooltip.renderer` as trusted HTML only~~ (documented as trusted HTML)
@@ -127,7 +127,7 @@ Target: immediate next milestone
 Target: `1.0.0`
 
 - ~~Add `yaxis2` and per-trace axis binding~~ (shipped in 0.1.12)
-- Add interaction-state persistence across layout/data updates
+- ~~Add interaction-state persistence across layout/data updates~~ (shipped)
 - Tighten interaction correctness across all existing trace types
 - Publish a clean “supported features” matrix
 
@@ -158,7 +158,7 @@ Call the project `1.0` when all of the following are true:
 - The README describes the product that actually ships today
 - All currently advertised trace types and interactions behave correctly under test
 - There are no known unsupported “normal use” paths in the implemented feature set
-- ~~Secondary-axis~~ (done) and state-persistence workflows exist
+- ~~Secondary-axis~~ (done) and ~~state-persistence workflows~~ (done) exist
 - Release checks pass cleanly
 - The team is willing to preserve the documented API under semver
 
@@ -169,5 +169,5 @@ The codebase is already beyond a toy or prototype. It has enough substance to ju
 The shortest honest path to `1.0` is not “add lots more trace types.” It is:
 
 1. Harden the features already present
-2. ~~Add secondary-axis~~ (done) and state-persistence support
+2. ~~Add secondary-axis~~ (done) and ~~state-persistence support~~ (done)
 3. Tighten docs, tests, and release guarantees until the public contract is stable

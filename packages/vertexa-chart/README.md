@@ -46,6 +46,12 @@ const chart = new Chart(document.querySelector("#root")!, {
 - Supports all axis types on y2: `linear`, `log`, `time`, and `category`.
 - Works with all trace types: `scatter`, `bar`, `area`, `histogram`.
 
+### Interaction State
+
+Set `layout.uirevision` to preserve the visible zoom/pan data window across
+`setTraces()` and `setLayout()` updates. Keep it unchanged to preserve user
+interaction state; change it to reset zoom/pan intentionally.
+
 ### Hover Templates
 
 Set `hovertemplate` on traces for escaped token substitution:
