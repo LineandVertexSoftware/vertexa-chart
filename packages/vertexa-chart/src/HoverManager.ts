@@ -373,12 +373,108 @@ export class HoverManager {
       return `${trace.name ?? "Trace"}  i=${hit.pointIndex}  x=${fmtDatum(hit.x)}  y=${fmtDatum(hit.y)}`;
     }
 
-    return tpl
-      .replaceAll("%{x}", escapeHtml(fmtDatum(hit.x)))
-      .replaceAll("%{y}", escapeHtml(fmtDatum(hit.y)))
-      .replaceAll("%{z}", escapeHtml(fmtNumber(zValue)))
-      .replaceAll("%{pointIndex}", escapeHtml(String(hit.pointIndex)))
-      .replaceAll("%{trace.name}", escapeHtml(String(trace.name ?? "")));
+    return tpl.replace(/%\{([^}]+)\}/g, (match, rawToken) => {
+      const resolved = this.resolveHoverTemplateToken(String(rawToken).trim(), trace, hit, zValue);
+      if (!resolved.resolved) return match;
+      return escapeHtml(this.formatHoverTemplateValue(resolved.value));
+    });
+  }
+
+  private resolveHoverTemplateToken(
+    token: string,
+    trace: Trace,
+    hit: PickResult,
+    zValue: number | undefined
+  ): { resolved: true; value: unknown } | { resolved: false } {
+    if (token === "x") return { resolved: true, value: hit.x };
+    if (token === "y") return { resolved: true, value: hit.y };
+    if (token === "z") return { resolved: true, value: fmtNumber(zValue) };
+    if (token === "pointIndex") return { resolved: true, value: hit.pointIndex };
+    if (token === "trace.name") return { resolved: true, value: trace.name ?? "" };
+    if (token === "text") return { resolved: true, value: this.getPointTextValue(trace, hit.pointIndex) };
+    if (token === "customdata") return { resolved: true, value: this.getArrayLikeValue(trace.customdata, hit.pointIndex) };
+    if (token === "meta") return { resolved: true, value: trace.meta };
+
+    const customDataMatch = /^customdata\[(\d+)\]$/.exec(token);
+    if (customDataMatch) {
+      return {
+        resolved: true,
+        value: this.getCustomDataIndexedValue(trace, hit.pointIndex, Number(customDataMatch[1]))
+      };
+    }
+
+    const metaMatch = /^meta\.(.+)$/.exec(token);
+    if (metaMatch) {
+      return { resolved: true, value: this.getPropertyPathValue(trace.meta, metaMatch[1]) };
+    }
+
+    return { resolved: false };
+  }
+
+  private getCustomDataIndexedValue(trace: Trace, pointIndex: number, customDataIndex: number): unknown {
+    const pointCustomData = this.getArrayLikeValue(trace.customdata, pointIndex);
+    if (pointCustomData == null) return undefined;
+
+    if (typeof pointCustomData !== "string" && this.isArrayLikeValue(pointCustomData)) {
+      return pointCustomData[customDataIndex];
+    }
+
+    const key = String(customDataIndex);
+    if ((typeof pointCustomData === "object" || typeof pointCustomData === "function") &&
+        Object.prototype.hasOwnProperty.call(pointCustomData, key)) {
+      return (pointCustomData as Record<string, unknown>)[key];
+    }
+
+    return undefined;
+  }
+
+  private getPointTextValue(trace: Trace, pointIndex: number): unknown {
+    const text = trace.text;
+    if (text == null || typeof text === "string" || typeof text === "number" || typeof text === "boolean" || text instanceof Date) {
+      return text;
+    }
+    return this.getArrayLikeValue(text, pointIndex);
+  }
+
+  private getArrayLikeValue(value: ArrayLike<unknown> | undefined, index: number): unknown {
+    if (!this.isArrayLikeValue(value) || index < 0 || index >= value.length) return undefined;
+    return value[index];
+  }
+
+  private getPropertyPathValue(root: unknown, path: string): unknown {
+    let current = root;
+    for (const part of path.split(".")) {
+      if (!part || current == null) return undefined;
+      const boxed = Object(current);
+      if (!Object.prototype.hasOwnProperty.call(boxed, part)) return undefined;
+      current = (boxed as Record<string, unknown>)[part];
+    }
+    return current;
+  }
+
+  private formatHoverTemplateValue(value: unknown): string {
+    if (value == null) return "";
+    if (value instanceof Date) return fmtDatum(value);
+    if (typeof value === "string") return value;
+    if (typeof value === "number") return Number.isFinite(value) ? String(value) : "n/a";
+    if (typeof value === "boolean" || typeof value === "bigint") return String(value);
+    if (typeof value === "symbol") return value.description ?? "";
+    if (this.isArrayLikeValue(value)) {
+      return Array.from(value).map((entry) => this.formatHoverTemplateValue(entry)).join(", ");
+    }
+    try {
+      const json = JSON.stringify(value);
+      if (typeof json === "string") return json;
+    } catch {
+      // Fall back to String(value) for cyclic or otherwise non-JSON metadata.
+    }
+    return String(value);
+  }
+
+  private isArrayLikeValue(value: unknown): value is ArrayLike<unknown> {
+    if (value == null || typeof value === "function") return false;
+    const length = (value as { length?: unknown }).length;
+    return typeof length === "number" && Number.isFinite(length) && length >= 0 && Math.floor(length) === length;
   }
 
   private makeTooltipContext(trace: Trace, hit: PickResult): ChartTooltipContext {
@@ -393,6 +489,9 @@ export class HoverManager {
       x: hit.x,
       y: hit.y,
       z,
+      text: this.getPointTextValue(trace, hit.pointIndex),
+      customdata: this.getArrayLikeValue(trace.customdata, hit.pointIndex),
+      meta: trace.meta,
       screenX: hit.screenX,
       screenY: hit.screenY,
       defaultLabel: this.formatHover(trace, hit)

@@ -46,6 +46,26 @@ const chart = new Chart(document.querySelector("#root")!, {
 - Supports all axis types on y2: `linear`, `log`, `time`, and `category`.
 - Works with all trace types: `scatter`, `bar`, `area`, `histogram`.
 
+### Hover Templates
+
+Set `hovertemplate` on traces for escaped token substitution:
+
+```ts
+{
+  type: "scatter",
+  x: [1, 2],
+  y: [42, 51],
+  text: ["p50", "p95"],
+  customdata: [["us-east"], ["eu-central"]],
+  meta: { unit: "ms" },
+  hovertemplate: "%{text}: %{y}%{meta.unit} %{customdata[0]}"
+}
+```
+
+Supported tokens include `%{x}`, `%{y}`, `%{pointIndex}`, `%{trace.name}`,
+`%{text}`, `%{customdata}`, `%{customdata[i]}`, `%{meta}`, `%{meta.path}`,
+and `%{z}` for heatmaps.
+
 ## Public API
 
 - `setTraces(traces)`

@@ -1,16 +1,17 @@
 import { WebGPURenderer } from "@lineandvertexsoftware/renderer-webgpu";
-import type { AxisType, Datum, ScatterTrace, Trace } from "./types.js";
+import type { AxisType, ChartAppendPointsUpdate, Datum, ScatterTrace, Trace } from "./types.js";
 import { toNumber, sortedOrder } from "./chart-utils.js";
 import { computeAxisDomain, normalizeInterleaved } from "./scene.js";
 import type { SceneCompiler } from "./SceneCompiler.js";
 import type { AxisManager } from "./AxisManager.js";
 
 export type PreparedUpdate = {
-  update: { traceIndex: number };
+  update: ChartAppendPointsUpdate;
   xNew: Datum[];
   yNew: Datum[];
   nNew: number;
   trimCount: number;
+  currentLen: number;
 };
 
 export class DataMutationManager {

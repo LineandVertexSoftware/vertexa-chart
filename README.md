@@ -258,7 +258,14 @@ theme: {
 // Append points with a sliding window of 200 samples per trace
 chart.appendPoints(
   [
-    { traceIndex: 0, x: [Date.now()], y: [sensor.read()], maxPoints: 200 }
+    {
+      traceIndex: 0,
+      x: [Date.now()],
+      y: [sensor.read()],
+      text: ["latest"],
+      customdata: [[sensor.status(), sensor.location()]],
+      maxPoints: 200
+    }
   ]
 );
 ```
@@ -284,6 +291,27 @@ const chart = new Chart(el, {
 ---
 
 ## Custom tooltip
+
+Trace-level `hovertemplate` strings support escaped token substitution:
+
+```ts
+traces: [
+  {
+    type: "scatter",
+    name: "Latency",
+    x: [1, 2, 3],
+    y: [42, 37, 51],
+    text: ["p50", "p75", "p95"],
+    customdata: [["us-east"], ["us-west"], ["eu-central"]],
+    meta: { unit: "ms" },
+    hovertemplate: "%{trace.name} %{text}: %{y}%{meta.unit}<br>%{customdata[0]}"
+  }
+]
+```
+
+Supported tokens are `%{x}`, `%{y}`, `%{pointIndex}`, `%{trace.name}`,
+`%{text}`, `%{customdata}`, `%{customdata[i]}`, `%{meta}`, `%{meta.path}`,
+and `%{z}` for heatmaps. Unknown tokens are left unchanged.
 
 ```ts
 // String formatter

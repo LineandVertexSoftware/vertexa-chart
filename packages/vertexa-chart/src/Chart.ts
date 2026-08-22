@@ -21,6 +21,7 @@ import type {
   Datum,
   Layout,
   Trace,
+  TraceTextValue,
   Visible
 } from "./types.js";
 import {
@@ -414,11 +415,11 @@ export class Chart implements ChartPublicApi {
       const currentLen = Math.min(trace.x.length, trace.y.length);
       const trimCount = maxPoints !== undefined ? Math.max(0, currentLen + nNew - maxPoints) : 0;
 
-      prepared.push({ update, xNew, yNew, nNew, trimCount });
+      prepared.push({ update, xNew, yNew, nNew, trimCount, currentLen });
     }
 
     // Mutate traces
-    for (const { update, xNew, yNew, nNew, trimCount } of prepared) {
+    for (const { update, xNew, yNew, nNew, trimCount, currentLen } of prepared) {
       if (nNew <= 0) continue;
       const trace = this.traces[update.traceIndex];
       // histogram throws in the validation loop above; x/y are always present here
@@ -433,6 +434,7 @@ export class Chart implements ChartPublicApi {
         xOut.splice(0, trimCount);
         yOut.splice(0, trimCount);
       }
+      this.updateTraceAuxiliaryData(trace, update, currentLen, nNew, trimCount);
       trace.x = xOut;
       trace.y = yOut;
     }
@@ -882,19 +884,88 @@ export class Chart implements ChartPublicApi {
         ...trace,
         visible: trace.visible ?? true,
         x: trace.x ? Array.from(trace.x) : undefined,
-        y: trace.y ? Array.from(trace.y) : undefined
+        y: trace.y ? Array.from(trace.y) : undefined,
+        customdata: this.copyTraceCustomData(trace.customdata),
+        text: this.copyTraceText(trace.text)
       };
     }
     return {
       ...trace,
       visible: trace.visible ?? true,
       x: Array.from(trace.x),
-      y: Array.from(trace.y)
+      y: Array.from(trace.y),
+      customdata: this.copyTraceCustomData(trace.customdata),
+      text: this.copyTraceText(trace.text)
     };
   }
 
+  private copyTraceCustomData(customdata: Trace["customdata"]): Trace["customdata"] {
+    return customdata == null ? undefined : Array.from(customdata);
+  }
 
+  private copyTraceText(text: Trace["text"]): Trace["text"] {
+    if (!this.isPointTextArray(text)) return text;
+    return Array.from(text);
+  }
 
+  private updateTraceAuxiliaryData(
+    trace: Trace,
+    update: ChartAppendPointsUpdate,
+    currentLen: number,
+    nNew: number,
+    trimCount: number
+  ) {
+    if (trace.customdata != null || update.customdata != null) {
+      const customdata = trace.customdata != null ? Array.from(trace.customdata) : [];
+      this.padArrayToLength(customdata, currentLen, undefined);
+      const nextCustomData = update.customdata != null ? Array.from(update.customdata) : [];
+      for (let i = 0; i < nNew; i++) {
+        customdata.push(nextCustomData[i]);
+      }
+      if (trimCount > 0) customdata.splice(0, trimCount);
+      trace.customdata = customdata;
+    }
+
+    if (this.isPointTextArray(trace.text) || update.text != null) {
+      const previousText = this.isPointTextArray(trace.text)
+        ? Array.from(trace.text)
+        : Array.from({ length: currentLen }, () => trace.text as TraceTextValue);
+      this.padArrayToLength(previousText, currentLen, undefined);
+
+      if (this.isPointTextArray(update.text)) {
+        const nextText = Array.from(update.text);
+        for (let i = 0; i < nNew; i++) {
+          previousText.push(nextText[i]);
+        }
+      } else {
+        for (let i = 0; i < nNew; i++) {
+          previousText.push(update.text as TraceTextValue);
+        }
+      }
+
+      if (trimCount > 0) previousText.splice(0, trimCount);
+      trace.text = previousText;
+    }
+  }
+
+  private isPointTextArray(text: Trace["text"]): text is ArrayLike<TraceTextValue> {
+    return text != null &&
+      typeof text !== "string" &&
+      typeof text !== "number" &&
+      typeof text !== "boolean" &&
+      !(text instanceof Date) &&
+      this.isArrayLikeValue(text);
+  }
+
+  private isArrayLikeValue(value: unknown): value is ArrayLike<unknown> {
+    if (value == null || typeof value === "function") return false;
+    const length = (value as { length?: unknown }).length;
+    return typeof length === "number" && Number.isFinite(length) && length >= 0 && Math.floor(length) === length;
+  }
+
+  private padArrayToLength<T>(values: T[], length: number, fill: T) {
+    while (values.length < length) values.push(fill);
+  }
 
   // ----------------------------
   // Range slider / selector

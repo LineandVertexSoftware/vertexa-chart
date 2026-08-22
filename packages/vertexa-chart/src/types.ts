@@ -282,7 +282,26 @@ export type LineSmoothingMode = "none" | "catmull-rom";
 
 export type TraceYAxisBinding = "y" | "y2";
 
-type TraceBase = {
+export type TraceTextValue = Datum | boolean | null | undefined;
+export type TraceText = TraceTextValue | ArrayLike<TraceTextValue>;
+export type TraceCustomData = ArrayLike<unknown>;
+export type TraceMeta = unknown;
+
+type TraceHoverFields = {
+  /** Template string for tooltip labels. Supports %{x}, %{y}, %{pointIndex}, %{trace.name}, %{text}, %{customdata}, %{customdata[i]}, %{meta}, %{meta.path}, and %{z} for heatmaps. */
+  hovertemplate?: string;
+
+  /** Per-point extra values available in hover templates as %{customdata} and %{customdata[i]}. */
+  customdata?: TraceCustomData;
+
+  /** Trace-level metadata available in hover templates as %{meta} and %{meta.path}. */
+  meta?: TraceMeta;
+
+  /** Scalar or per-point text available in hover templates as %{text}. */
+  text?: TraceText;
+};
+
+type TraceBase = TraceHoverFields & {
   id?: string;
   name?: string;
   visible?: Visible;
@@ -292,8 +311,6 @@ type TraceBase = {
 
   /** Bind this trace to the primary y-axis (`"y"`, default) or the secondary y-axis (`"y2"`). */
   yaxis?: TraceYAxisBinding;
-
-  hovertemplate?: string; // supports %{x} %{y} %{pointIndex} %{trace.name} and %{z} for heatmaps
 };
 
 export type ScatterTrace = TraceBase & {
@@ -363,12 +380,11 @@ export type HistogramBins = {
   size?: number;
 };
 
-export type HistogramTrace = {
+export type HistogramTrace = TraceHoverFields & {
   type: "histogram";
   id?: string;
   name?: string;
   visible?: Visible;
-  hovertemplate?: string;
   /** Bind this trace to the primary y-axis (`"y"`, default) or the secondary y-axis (`"y2"`). */
   yaxis?: TraceYAxisBinding;
 
@@ -488,6 +504,9 @@ export type ChartTooltipContext = {
   x: Datum;
   y: Datum;
   z?: number;
+  text?: unknown;
+  customdata?: unknown;
+  meta?: unknown;
   screenX: number; // CSS px in chart container coordinates
   screenY: number; // CSS px in chart container coordinates
   defaultLabel: string;
@@ -553,6 +572,16 @@ export type ChartAppendPointsUpdate = {
    * New y values to append.
    */
   y: ArrayLike<Datum>;
+
+  /**
+   * Optional per-point extra values to append alongside x/y.
+   */
+  customdata?: TraceCustomData;
+
+  /**
+   * Optional scalar or per-point text to append alongside x/y.
+   */
+  text?: TraceText;
 
   /**
    * Optional per-trace sliding window size applied after append.

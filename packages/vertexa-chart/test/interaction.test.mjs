@@ -785,8 +785,24 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     const chart = baseChart(Chart);
     Object.assign(chart, {
       traces: [
-        { type: "scatter", x: [0, 1], y: [10, 11], visible: true, name: "A" },
-        { type: "scatter", x: new Float32Array([0, 1]), y: new Float32Array([20, 21]), visible: true, name: "B" }
+        {
+          type: "scatter",
+          x: [0, 1],
+          y: [10, 11],
+          text: ["old-a0", "old-a1"],
+          customdata: [["a0"], ["a1"]],
+          visible: true,
+          name: "A"
+        },
+        {
+          type: "scatter",
+          x: new Float32Array([0, 1]),
+          y: new Float32Array([20, 21]),
+          text: "baseline",
+          customdata: [["b0"], ["b1"]],
+          visible: true,
+          name: "B"
+        }
       ],
       dataMutationManager: { tryAppendFast: () => false },
       sceneCompiler: {
@@ -812,16 +828,33 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
 
     chart.appendPoints(
       [
-        { traceIndex: 0, x: [2, 3, 4], y: [12, 13, 14] },
-        { traceIndex: 1, x: [2, 3], y: [22, 23], maxPoints: 3 }
+        {
+          traceIndex: 0,
+          x: [2, 3, 4],
+          y: [12, 13, 14],
+          text: ["new-a2", "new-a3", "new-a4"],
+          customdata: [["a2"], ["a3"], ["a4"]]
+        },
+        {
+          traceIndex: 1,
+          x: [2, 3],
+          y: [22, 23],
+          text: ["new-b2", "new-b3"],
+          customdata: [["b2"], ["b3"]],
+          maxPoints: 3
+        }
       ],
       { maxPoints: 4 }
     );
 
     assert.deepEqual(chart.traces[0].x, [1, 2, 3, 4]);
     assert.deepEqual(chart.traces[0].y, [11, 12, 13, 14]);
+    assert.deepEqual(chart.traces[0].text, ["old-a1", "new-a2", "new-a3", "new-a4"]);
+    assert.deepEqual(chart.traces[0].customdata, [["a1"], ["a2"], ["a3"], ["a4"]]);
     assert.deepEqual(chart.traces[1].x, [1, 2, 3]);
     assert.deepEqual(chart.traces[1].y, [21, 22, 23]);
+    assert.deepEqual(chart.traces[1].text, ["baseline", "new-b2", "new-b3"]);
+    assert.deepEqual(chart.traces[1].customdata, [["b1"], ["b2"], ["b3"]]);
 
     assert.equal(rendererSetLayers.calls.length, 1);
     assert.equal(setAxes.calls.length, 1);
@@ -1246,6 +1279,88 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     });
 
     assert.equal(label, "Heat x=1 y=0 z=20");
+  });
+
+  await t.test("hovertemplate resolves customdata, meta, and text with escaped values", () => {
+    const traces = [
+      {
+        type: "scatter",
+        name: "<Revenue>",
+        x: [1, 2],
+        y: [3, 4],
+        text: ["ignored", "Beta & <b>"],
+        customdata: [
+          ["zero", "unused"],
+          ["safe", "<img src=x onerror=alert(1)>"]
+        ],
+        meta: {
+          unit: "ms & <s>",
+          nested: { label: "North <East>" }
+        },
+        hovertemplate: "%{trace.name}|%{text}|%{customdata[1]}|%{meta.unit}|%{meta.nested.label}|%{unknown}"
+      }
+    ];
+
+    const hoverManager = new HoverManager(
+      null, null, () => undefined, tooltipElementStub(),
+      () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces, theme: BASE_THEME }),
+      {},
+      { getHoverMode: () => "closest" },
+      new SceneCompiler(),
+      () => {}
+    );
+
+    const hit = {
+      traceIndex: 0,
+      pointIndex: 1,
+      x: 2,
+      y: 4,
+      screenX: 0,
+      screenY: 0
+    };
+    const label = hoverManager.formatHover(traces[0], hit);
+    const context = hoverManager.makeTooltipContext(traces[0], hit);
+
+    assert.equal(
+      label,
+      "&lt;Revenue&gt;|Beta &amp; &lt;b&gt;|&lt;img src=x onerror=alert(1)&gt;|ms &amp; &lt;s&gt;|North &lt;East&gt;|%{unknown}"
+    );
+    assert.equal(context.text, "Beta & <b>");
+    assert.deepEqual(context.customdata, ["safe", "<img src=x onerror=alert(1)>"]);
+    assert.equal(context.meta, traces[0].meta);
+  });
+
+  await t.test("hovertemplate uses blank fallbacks for missing v2 token values", () => {
+    const traces = [
+      {
+        type: "scatter",
+        x: [1, 2],
+        y: [3, 4],
+        customdata: ["only", "scalar"],
+        meta: {},
+        hovertemplate: "text=%{text}|custom=%{customdata}|indexed=%{customdata[0]}|missing=%{customdata[1]}|meta=%{meta.nope}|z=%{z}"
+      }
+    ];
+
+    const hoverManager = new HoverManager(
+      null, null, () => undefined, tooltipElementStub(),
+      () => ({ destroyed: false, hoverThrottleMs: 0, pickingMode: "cpu", width: 320, height: 240, dpr: 1, padding: BASE_PADDING, zoom: BASE_ZOOM, traces, theme: BASE_THEME }),
+      {},
+      { getHoverMode: () => "closest" },
+      new SceneCompiler(),
+      () => {}
+    );
+
+    const label = hoverManager.formatHover(traces[0], {
+      traceIndex: 0,
+      pointIndex: 1,
+      x: 2,
+      y: 4,
+      screenX: 0,
+      screenY: 0
+    });
+
+    assert.equal(label, "text=|custom=scalar|indexed=|missing=|meta=|z=n/a");
   });
 
   await t.test("appendPoints throws for heatmap traces", () => {
