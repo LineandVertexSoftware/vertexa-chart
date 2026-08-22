@@ -1,6 +1,6 @@
 # Vertexa Chart 1.0 Roadmap
 
-Last updated: April 13, 2026
+Last updated: August 22, 2026
 
 ## Release assessment
 
@@ -25,8 +25,8 @@ I would not call the current codebase a 1.0 yet. It looks closer to a strong `0.
 | Axes | Ready | `linear`, `log`, `time`, and `category` axes; secondary y-axis (`yaxis2`) with per-trace binding. |
 | Layout and styling | Ready | Title, grid, legend, annotations, margins, theme, high-contrast theme defaults. |
 | Interaction | Ready | Zoom, pan, hover (`closest`, `x`, `y`, `none`), click, legend toggle, box select, lasso select, fit-to-data, autoscale-y, aspect lock. |
-| Programmatic API | Ready | `setTraces`, `appendPoints`, `setLayout`, `setSize`, `panBy`, `zoomBy`, `resetView`, `fitToData`, `autoscaleY`, `setAspectLock`, `setPerformanceMode`, `getPerformanceStats`, `destroy`. |
-| Streaming/data mutation | Partial | `appendPoints()` works for x/y traces; fast GPU append path is limited to unsmoothed scatter traces when domains do not change. |
+| Programmatic API | Ready | `setTraces`, `appendPoints`, `setLayout`, `setSize`, `panBy`, `zoomBy`, `setViewTransform`, `setInteractionRenderMode`, `resetView`, `fitToData`, `autoscaleY`, `setAspectLock`, `setPerformanceMode`, `setXRange`, `getPerformanceStats`, `destroy`. |
+| Streaming/data mutation | Partial | `appendPoints()` works for x/y traces plus hover `text` and `customdata`; fast GPU append path is limited to unsmoothed scatter traces when domains do not change. |
 | Export and UI | Ready | PNG, SVG, CSV export; optional built-in toolbar with export and fullscreen controls. |
 | Accessibility | Partial | Keyboard navigation, ARIA labels, live tooltip region, high-contrast mode are present; richer screen-reader behavior is not. |
 | Testing | Partial | Good unit coverage, but visual regression only covers 3 demo scenarios. |
@@ -47,9 +47,11 @@ Not every missing feature must be in 1.0, but interaction-state persistence is c
 
 ### 2. A few correctness and contract issues still need tightening
 
-- `setLayout()` currently replaces the layout object; the top-level README describes it as a merge-style API
-- `tooltip.renderer` string output is written through `innerHTML`, so the safety contract is currently “trusted HTML only,” but that is not clearly documented or tested
-- Inference from the current `SceneCompiler` and `PickingEngine`: scatter traces with `mode: "lines"` appear to be non-pickable/non-selectable because picking structures are built from marker layers, not line layers
+- ~~`setLayout()` currently replaces the layout object; the top-level README describes it as a merge-style API~~ (fixed and covered by tests)
+- ~~`tooltip.renderer` string output is written through `innerHTML`, so the safety contract is currently “trusted HTML only,” but that is not clearly documented or tested~~ (documented and covered by tests)
+- ~~Scatter traces with `mode: "lines"` appear to be non-pickable/non-selectable~~ (fixed for CPU picking and covered by tests)
+- Broader hover/click/select regression coverage is still needed across all implemented trace families
+- CPU/GPU picking fallback behavior still needs a clearer tested contract
 
 These are the kinds of gaps that create churn after 1.0 because they force either behavior changes or documentation walk-backs.
 
@@ -70,7 +72,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 - Explicitly document WebGPU-only support and supported browser expectations
 
 2. Close correctness gaps in the current feature set
-- Fix or explicitly disallow unsupported picking cases, especially line-only scatter traces
+- ~~Fix or explicitly disallow unsupported picking cases, especially line-only scatter traces~~ (fixed and covered by tests)
 - Add regression tests for hover/click/select across all implemented trace families
 - Define and test the CPU/GPU picking fallback behavior
 
@@ -80,7 +82,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 - Persistent interaction state across `setTraces()` / `setLayout()` updates
 
 4. Harden tooltip and export behavior
-- Either sanitize custom tooltip HTML or document `tooltip.renderer` as trusted HTML only
+- ~~Either sanitize custom tooltip HTML or document `tooltip.renderer` as trusted HTML only~~ (documented as trusted HTML)
 - Add dedicated regression tests for PNG, SVG, and CSV export on mixed-layer charts
 
 5. Raise the release bar
@@ -116,8 +118,8 @@ These are valuable, but I would treat them as `1.1+` work:
 Target: immediate next milestone
 
 - Audit docs against implementation and remove contradictions
-- Fix line-only picking/select behavior or formally mark it unsupported
-- Add tests for tooltip security contract and export behavior
+- ~~Fix line-only picking/select behavior or formally mark it unsupported~~ (fixed for CPU picking)
+- ~~Add tests for tooltip security contract~~ and export behavior
 - Expand visual coverage beyond the current 3 snapshot scenarios
 
 ### Phase 2: 1.0 blockers
