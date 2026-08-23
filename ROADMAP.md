@@ -29,7 +29,7 @@ I would not call the current codebase a 1.0 yet. It looks closer to a strong `0.
 | Streaming/data mutation | Partial | `appendPoints()` works for x/y traces plus hover `text` and `customdata`; fast GPU append path is limited to unsmoothed scatter traces when domains do not change. |
 | Export and UI | Ready | PNG, SVG, CSV export; optional built-in toolbar with export and fullscreen controls. |
 | Accessibility | Partial | Keyboard navigation, ARIA labels, live tooltip region, high-contrast mode are present; richer screen-reader behavior is not. |
-| Testing | Partial | Good unit coverage, but visual regression only covers 3 demo scenarios. |
+| Testing | Partial | Good unit coverage, plus visual regression across 7 deterministic demo scenarios. |
 | Multi-chart workflows | Partial | Demo proves linked charts can be built from callbacks, but there is no built-in sync helper API. |
 
 ## Important gaps and risks
@@ -57,8 +57,8 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 
 ### 3. The quality gate is still too thin for a stable major
 
-- Visual regression currently covers only `getting-started`, `axis-grid`, and `events-api`
-- There is no broad regression matrix for grouped/stacked bars, area fills, heatmap hover, histogram export, toolbar states, or selection overlays
+- ~~Visual regression currently covers only `getting-started`, `axis-grid`, and `events-api`~~ (expanded to 7 deterministic scenarios)
+- Broad visual coverage now includes grouped bars, time bars, heatmap, area fills, histogram, toolbar controls, legend states, and selected-state UI
 - Mobile/touch behavior largely depends on D3 defaults and is not explicitly hardened
 - Performance claims are plausible, but there is no release baseline or threshold documented in the repo
 
@@ -120,7 +120,7 @@ Target: immediate next milestone
 - Audit docs against implementation and remove contradictions
 - ~~Fix line-only picking/select behavior or formally mark it unsupported~~ (fixed for CPU picking)
 - ~~Add tests for tooltip security contract~~ and export behavior
-- Expand visual coverage beyond the current 3 snapshot scenarios
+- ~~Expand visual coverage beyond the current 3 snapshot scenarios~~ (expanded to 7 deterministic scenarios)
 
 ### Phase 2: 1.0 blockers
 

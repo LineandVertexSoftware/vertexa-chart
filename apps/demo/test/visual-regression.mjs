@@ -16,13 +16,17 @@ const PORT = Number(process.env.VISUAL_PORT ?? 4173);
 const BASE_URL = process.env.VISUAL_BASE_URL ?? `http://${HOST}:${PORT}`;
 const UPDATE_SNAPSHOTS = process.env.UPDATE_SNAPSHOTS === "1";
 const CHROME_PATH = process.env.CHROME_PATH ?? findChromeExecutable();
-const WINDOW_SIZE = "1420,920";
+const WINDOW_SIZE = "1420,1120";
 const distDir = path.join(demoDir, "dist");
 
 const scenarios = [
   { id: "getting-started", name: "getting-started" },
   { id: "axis-grid", name: "axis-grid" },
-  { id: "events-api", name: "events-api" }
+  { id: "events-api", name: "events-api" },
+  { id: "bar-basics", name: "bar-basics" },
+  { id: "bar-time", name: "bar-time" },
+  { id: "heatmap-basics", name: "heatmap-basics" },
+  { id: "visual-matrix", name: "visual-matrix" }
 ];
 
 if (!CHROME_PATH) {
@@ -99,7 +103,7 @@ async function captureChromeScreenshot({ screenshotPath, url }) {
     "--headless=new",
     "--no-sandbox",
     "--disable-setuid-sandbox",
-    "--disable-gpu",
+    "--enable-unsafe-webgpu",
     "--no-first-run",
     "--no-default-browser-check",
     "--disable-sync",

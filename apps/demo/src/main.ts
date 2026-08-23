@@ -30,7 +30,8 @@ type ExampleId =
   | "bar-basics"
   | "bar-time"
   | "bar-interactions"
-  | "heatmap-basics";
+  | "heatmap-basics"
+  | "visual-matrix";
 
 type ExampleDefinition = {
   id: ExampleId;
@@ -134,6 +135,15 @@ const EXAMPLES: ExampleDefinition[] = [
     focus: "Heatmap rendering with runtime palette swaps and explicit z-domain control.",
     tags: ["Heatmap", "Colorscale", "z-range"],
     apis: ["type: \"heatmap\"", "setTraces()", "heatmap.zmin/zmax"]
+  },
+  {
+    id: "visual-matrix",
+    title: "Visual Matrix",
+    summary: "Snapshot-focused coverage for trace families, toolbar, legend, and selection state.",
+    category: "Regression",
+    focus: "A deterministic matrix used by visual tests to cover area, histogram, heatmap, bars, toolbar, legend, and selected-state UI.",
+    tags: ["Visual", "Area", "Histogram", "Selection"],
+    apis: ["type: \"area\"", "type: \"histogram\"", "toolbar"]
   }
 ];
 
@@ -1343,6 +1353,14 @@ function runVertexaWorkbench() {
   };
 
   const updateStatus = () => {
+    if (snapshotMode) {
+      statusEl.textContent = `${computeTotalPoints().toLocaleString()} points • render stable • 250,000 drawn • ${selectedCount.toLocaleString()} selected • x=n/a y=n/a`;
+      lodBadgeEl.textContent = "LOD: snapshot";
+      const bufferMb = computeBufferMb();
+      bufferBadgeEl.textContent = `GPU buffers: ${bufferMb.toFixed(1)} MB`;
+      bufferMeterEl.style.width = `${Math.max(4, Math.min(100, (bufferMb / 240) * 100))}%`;
+      return;
+    }
     const stats = chart.getPerformanceStats();
     const total = computeTotalPoints();
     const sampledPct = total > 0 ? (stats.sampledPoints / total) * 100 : 100;
@@ -2721,6 +2739,243 @@ function runHeatmapBasics() {
   return () => chart.destroy();
 }
 
+function runVisualMatrix() {
+  const rootEl = root;
+  if (!rootEl) throw new Error("Missing #root container.");
+
+  rootEl.innerHTML = `
+    <section class="demo-shell demo-shell--wide visual-matrix-shell">
+      ${renderDemoHeader("visual-matrix")}
+      <main class="visual-matrix">
+        <section class="visual-matrix-card visual-matrix-card--large">
+          <header>
+            <div>
+              <p class="demo-chart-kicker">Trace Family</p>
+              <h2>Area + Selection</h2>
+            </div>
+            <span class="demo-mini-chip demo-mini-chip--accent">selected 84</span>
+          </header>
+          <div class="visual-chart-frame">
+            <div id="visual-area-host" class="visual-chart-host"></div>
+            <div class="visual-selection-overlay" aria-hidden="true">
+              <span>selection window</span>
+            </div>
+          </div>
+        </section>
+        <section class="visual-matrix-card">
+          <header>
+            <div>
+              <p class="demo-chart-kicker">Trace Family</p>
+              <h2>Histogram</h2>
+            </div>
+            <span class="demo-mini-chip">bins</span>
+          </header>
+          <div id="visual-histogram-host" class="visual-chart-host"></div>
+        </section>
+        <section class="visual-matrix-card">
+          <header>
+            <div>
+              <p class="demo-chart-kicker">Trace Family</p>
+              <h2>Grouped Bars</h2>
+            </div>
+            <span class="demo-mini-chip">legend</span>
+          </header>
+          <div id="visual-bar-host" class="visual-chart-host"></div>
+        </section>
+        <section class="visual-matrix-card">
+          <header>
+            <div>
+              <p class="demo-chart-kicker">Trace Family</p>
+              <h2>Heatmap</h2>
+            </div>
+            <span class="demo-mini-chip">palette</span>
+          </header>
+          <div id="visual-heatmap-host" class="visual-chart-host"></div>
+        </section>
+      </main>
+      <aside class="visual-state-panel">
+        <div class="vx-toolbar vx-modebar" role="toolbar" aria-label="Snapshot toolbar">
+          <button class="vx-tool vx-tool-icon vx-tool--pan" title="Pan"><span class="sr-only">Pan</span></button>
+          <button class="vx-tool vx-tool-icon vx-tool--zoom-in" title="Zoom in"><span class="sr-only">Zoom in</span></button>
+          <button class="vx-tool vx-tool-icon vx-tool--zoom-out" title="Zoom out"><span class="sr-only">Zoom out</span></button>
+          <button class="vx-tool vx-tool-icon vx-tool--reset" title="Reset"><span class="sr-only">Reset</span></button>
+          <button class="vx-tool vx-tool-icon vx-tool--export vx-tool-cta" title="Export"><span class="sr-only">Export</span></button>
+        </div>
+        <div class="visual-state-details">
+          <strong>Regression States</strong>
+          <span>legend visible</span>
+          <span>selection pill visible</span>
+          <span>toolbar controls visible</span>
+          <span>4 trace families rendered</span>
+        </div>
+      </aside>
+    </section>
+  `;
+  attachDemoHeaderActions("visual-matrix");
+
+  const areaHost = rootEl.querySelector<HTMLDivElement>("#visual-area-host");
+  const histogramHost = rootEl.querySelector<HTMLDivElement>("#visual-histogram-host");
+  const barHost = rootEl.querySelector<HTMLDivElement>("#visual-bar-host");
+  const heatmapHost = rootEl.querySelector<HTMLDivElement>("#visual-heatmap-host");
+  if (!areaHost || !histogramHost || !barHost || !heatmapHost) throw new Error("Visual matrix hosts missing.");
+
+  const areaX = Array.from({ length: 72 }, (_, i) => i);
+  const areaY = areaX.map((x) => 42 + Math.sin(x * 0.16) * 12 + Math.cos(x * 0.07) * 6);
+  const histData = Array.from({ length: 260 }, (_, i) => {
+    const cluster = i % 3;
+    return 40 + cluster * 14 + Math.sin(i * 0.37) * 5 + (rand() - 0.5) * 9;
+  });
+  const months = Array.from({ length: 8 }, (_, i) => i + 1);
+  const heatX = Array.from({ length: 12 }, (_, i) => i + 1);
+  const heatY = Array.from({ length: 8 }, (_, i) => i + 1);
+  const heatZ = heatY.map((_, yi) =>
+    heatX.map((_, xi) => {
+      const x = xi / Math.max(1, heatX.length - 1);
+      const y = yi / Math.max(1, heatY.length - 1);
+      return (Math.sin(x * Math.PI * 3.2) + Math.cos(y * Math.PI * 2.6) + 2.2) * 22;
+    })
+  );
+
+  const commonTheme = {
+    colors: {
+      background: "#fbfdff",
+      text: "#102131",
+      axis: "#64748b",
+      grid: "#dbeafe",
+      tooltipBackground: "#0f172a",
+      tooltipText: "#f8fafc",
+      palette: ["#0f766e", "#2563eb", "#f97316", "#7c3aed"]
+    },
+    grid: { show: true, color: "#e5e7eb", opacity: 0.82, strokeWidth: 1 },
+    tooltip: { background: "#0f172a", textColor: "#f8fafc", borderRadiusPx: 8 }
+  };
+
+  const charts = [
+    createDemoChart(areaHost, {
+      width: 620,
+      height: 360,
+      theme: commonTheme,
+      toolbar: { show: true, fullscreen: false, export: true, exportFormats: ["png", "svg"] },
+      layout: {
+        title: "Area utilization",
+        hovermode: "closest",
+        legend: { show: true },
+        margin: { top: 30, right: 20, bottom: 40, left: 48 },
+        xaxis: { type: "linear", title: "Minute", tickFormat: ".0f" },
+        yaxis: { type: "linear", title: "Load", min: 20, max: 70 },
+        annotations: [
+          { type: "region", x0: 25, y0: 24, x1: 46, y1: 66, fill: "#ccfbf1", fillOpacity: 0.28, stroke: "#0f766e", strokeOpacity: 0.34 },
+          { type: "label", x: 47, y: 65, text: "selected", color: "#115e59", background: "#ecfeff", backgroundOpacity: 0.92, anchor: "start" }
+        ]
+      },
+      traces: [
+        {
+          type: "area",
+          name: "Load",
+          x: areaX,
+          y: areaY,
+          mode: "lines",
+          area: { base: 22, color: "#0f766e", opacity: 0.28 },
+          line: { color: "#0f766e", opacity: 0.9, widthPx: 2 }
+        },
+        {
+          type: "scatter",
+          name: "Selection",
+          x: areaX.slice(26, 47),
+          y: areaY.slice(26, 47),
+          mode: "markers",
+          marker: { sizePx: 4, color: "#facc15", opacity: 0.95 }
+        }
+      ]
+    }),
+    createDemoChart(histogramHost, {
+      width: 460,
+      height: 300,
+      theme: commonTheme,
+      layout: {
+        title: "Latency distribution",
+        hovermode: "closest",
+        legend: { show: true },
+        margin: { top: 30, right: 16, bottom: 38, left: 44 },
+        xaxis: { type: "linear", title: "ms", tickFormat: ".0f" },
+        yaxis: { type: "linear", title: "count", tickFormat: ".0f" }
+      },
+      traces: [
+        {
+          type: "histogram",
+          name: "Requests",
+          x: histData,
+          nbinsx: 16,
+          bar: { color: "#7c3aed", opacity: 0.62 }
+        }
+      ]
+    }),
+    createDemoChart(barHost, {
+      width: 460,
+      height: 300,
+      theme: commonTheme,
+      layout: {
+        title: "Grouped regional bars",
+        hovermode: "closest",
+        legend: { show: true },
+        margin: { top: 30, right: 16, bottom: 38, left: 44 },
+        xaxis: { type: "linear", title: "Month", tickFormat: ".0f", min: 0.5, max: 8.5 },
+        yaxis: { type: "linear", title: "Units", min: 0, max: 90 }
+      },
+      traces: [
+        {
+          type: "bar",
+          name: "North",
+          x: months.map((m) => m - 0.14),
+          y: months.map((m) => 42 + Math.sin(m * 0.6) * 14 + m * 2),
+          bar: { widthPx: 12, color: "#2563eb", opacity: 0.68 }
+        },
+        {
+          type: "bar",
+          name: "South",
+          x: months.map((m) => m + 0.14),
+          y: months.map((m) => 36 + Math.cos(m * 0.55) * 12 + m * 2.4),
+          bar: { widthPx: 12, color: "#f97316", opacity: 0.64 }
+        }
+      ]
+    }),
+    createDemoChart(heatmapHost, {
+      width: 460,
+      height: 300,
+      theme: commonTheme,
+      layout: {
+        title: "Cell utilization",
+        hovermode: "closest",
+        margin: { top: 30, right: 16, bottom: 38, left: 44 },
+        xaxis: { type: "linear", title: "Column", tickFormat: ".0f", min: 1, max: 12 },
+        yaxis: { type: "linear", title: "Row", tickFormat: ".0f", min: 1, max: 8 },
+        annotations: [
+          { type: "region", x0: 4, y0: 3, x1: 8, y1: 6, fill: "#fef3c7", fillOpacity: 0.18, stroke: "#b45309", strokeOpacity: 0.32 }
+        ]
+      },
+      traces: [
+        {
+          type: "heatmap",
+          name: "Utilization",
+          x: heatX,
+          y: heatY,
+          z: heatZ,
+          heatmap: {
+            colorscale: ["#0f172a", "#1d4ed8", "#06b6d4", "#a3e635", "#f97316"],
+            opacity: 0.86,
+            zmin: 15,
+            zmax: 90
+          }
+        }
+      ]
+    })
+  ];
+
+  return () => {
+    charts.forEach((chart) => chart.destroy());
+  };
+}
+
 const requestedExample = params.get("example");
 const activeExample: ExampleId =
   requestedExample === "axis-grid" ||
@@ -2732,6 +2987,7 @@ const activeExample: ExampleId =
   requestedExample === "bar-time" ||
   requestedExample === "bar-interactions" ||
   requestedExample === "heatmap-basics" ||
+  requestedExample === "visual-matrix" ||
   requestedExample === "getting-started"
     ? requestedExample
     : "getting-started";
@@ -2761,7 +3017,9 @@ const cleanup =
               ? runBarInteractions()
               : activeExample === "heatmap-basics"
                 ? runHeatmapBasics()
-                : runGettingStarted();
+                : activeExample === "visual-matrix"
+                  ? runVisualMatrix()
+                  : runGettingStarted();
 
 window.addEventListener("beforeunload", () => {
   cleanup();

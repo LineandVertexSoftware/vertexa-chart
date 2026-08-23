@@ -503,6 +503,117 @@ html, body {
   pointer-events: none;
 }
 
+.visual-matrix-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  gap: 14px;
+}
+
+.visual-matrix-shell .demo-header {
+  grid-column: 1 / -1;
+  margin-bottom: 0;
+}
+
+.visual-matrix {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.visual-matrix-card {
+  min-width: 0;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+  padding: 10px;
+}
+
+.visual-matrix-card--large {
+  grid-row: auto;
+}
+
+.visual-matrix-card header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.visual-matrix-card h2 {
+  margin: 0;
+  color: #102131;
+  font-size: 16px;
+}
+
+.visual-chart-frame {
+  position: relative;
+}
+
+.visual-chart-host {
+  min-height: 300px;
+  border: 1px solid rgba(219, 234, 254, 0.95);
+  border-radius: 12px;
+  overflow: hidden;
+  background: linear-gradient(180deg, #ffffff, #f8fbff);
+}
+
+.visual-selection-overlay {
+  position: absolute;
+  left: 43%;
+  top: 24%;
+  width: 26%;
+  height: 50%;
+  border: 1px dashed rgba(15, 118, 110, 0.72);
+  background: rgba(153, 246, 228, 0.14);
+  pointer-events: none;
+}
+
+.visual-selection-overlay span {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.94);
+  color: #115e59;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 7px;
+}
+
+.visual-state-panel {
+  align-self: start;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+  padding: 12px;
+}
+
+.visual-state-panel .vx-modebar {
+  justify-content: flex-start;
+}
+
+.visual-state-details {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  color: #35515f;
+  font-size: 13px;
+}
+
+.visual-state-details strong {
+  color: #102131;
+}
+
+.visual-state-details span {
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 10px;
+  background: #f8fbff;
+  padding: 8px 10px;
+}
+
 @media (max-width: 1080px) {
   #root {
     padding: 14px;
@@ -532,6 +643,11 @@ html, body {
 
   .demo-panel {
     position: static;
+  }
+
+  .visual-matrix-shell,
+  .visual-matrix {
+    grid-template-columns: 1fr;
   }
 
   .chart-host {
