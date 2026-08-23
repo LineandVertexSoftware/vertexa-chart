@@ -9,6 +9,13 @@
 
 ---
 
+## Release process
+
+See [RELEASE.md](RELEASE.md) for the local release baseline, including package
+checks, visual snapshots, benchmark comparison, and npm publish commands.
+
+---
+
 ## Why vertexa-chart?
 
 - **GPU rendering** — WebGPU pipelines handle scatter, line, bar, area, and heatmap traces at 60 fps even with millions of points.

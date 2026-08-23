@@ -1,6 +1,6 @@
 # Vertexa Chart 1.0 Roadmap
 
-Last updated: August 22, 2026
+Last updated: August 23, 2026
 
 ## Release assessment
 
@@ -60,7 +60,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 - ~~Visual regression currently covers only `getting-started`, `axis-grid`, and `events-api`~~ (expanded to 7 deterministic scenarios)
 - Broad visual coverage now includes grouped bars, time bars, heatmap, area fills, histogram, toolbar controls, legend states, and selected-state UI
 - Mobile/touch behavior largely depends on D3 defaults and is not explicitly hardened
-- Performance claims are plausible, but there is no release baseline or threshold documented in the repo
+- Performance claims are plausible, and `RELEASE.md` now defines a local baseline; automated threshold enforcement is still pending
 
 ## What I would require before calling this 1.0
 
@@ -87,7 +87,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 
 5. Raise the release bar
 - Expand visual regression coverage to bar, area, heatmap, histogram, toolbar, legend, and selection states
-- Define a simple performance baseline and acceptable regression threshold
+- ~~Define a simple performance baseline and acceptable regression threshold~~ (documented in `RELEASE.md`)
 - Treat `build`, `typecheck`, `test`, and `pack:check` as the minimum release gate
 
 ### P1: Strong candidates for 1.0 if the target user is dashboard/product teams
