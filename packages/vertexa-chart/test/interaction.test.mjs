@@ -131,6 +131,92 @@ function mockAxisManager(overrides = {}) {
   };
 }
 
+function makeTraceFamilyInteractionTraces() {
+  return [
+    {
+      type: "scatter",
+      name: "Scatter Family",
+      x: [0, 1],
+      y: [1, 2],
+      mode: "lines+markers"
+    },
+    {
+      type: "bar",
+      name: "Bar Family",
+      x: [10, 11],
+      y: [3, 4],
+      bar: { widthPx: 14 }
+    },
+    {
+      type: "area",
+      name: "Area Family",
+      x: [20, 21],
+      y: [5, 6],
+      mode: "lines+markers",
+      marker: { sizePx: 5 }
+    },
+    {
+      type: "heatmap",
+      name: "Heatmap Family",
+      x: [30, 31],
+      y: [7, 8],
+      z: [
+        [9, 10],
+        [11, 12]
+      ]
+    },
+    {
+      type: "histogram",
+      name: "Histogram Family",
+      x: [40, 40, 41, 42, 42, 42],
+      nbinsx: 3
+    },
+    {
+      type: "scatter",
+      name: "Hidden Family",
+      x: [50],
+      y: [50],
+      visible: "legendonly"
+    }
+  ];
+}
+
+function hoverEventForCompiledPoint(sceneCompiler, pickingEngine, traceIndex, pointIndex) {
+  const norm = sceneCompiler.markerNormByTrace.get(traceIndex);
+  assert.ok(norm, `trace ${traceIndex} should have pick metadata`);
+  const offset = pointIndex * 2;
+  assert.ok(offset + 1 < norm.length, `trace ${traceIndex} point ${pointIndex} should exist`);
+
+  const { screenX, screenY } = pickingEngine.toScreenFromNorm(norm[offset], norm[offset + 1]);
+  const traceData = sceneCompiler.traceData[traceIndex];
+  assert.ok(traceData, `trace ${traceIndex} should have trace data`);
+
+  return {
+    inside: true,
+    xSvg: screenX,
+    ySvg: screenY,
+    xPlot: screenX - BASE_PADDING.l,
+    yPlot: screenY - BASE_PADDING.t,
+    xData: traceData.xs[pointIndex],
+    yData: traceData.ys[pointIndex]
+  };
+}
+
+function expectedChartPoint(sceneCompiler, traceIndex, pointIndex, event) {
+  const traceData = sceneCompiler.traceData[traceIndex];
+  assert.ok(traceData, `trace ${traceIndex} should have trace data`);
+
+  return {
+    traceIndex,
+    pointIndex,
+    x: traceData.xs[pointIndex],
+    y: traceData.ys[pointIndex],
+    screenX: event.xSvg,
+    screenY: event.ySvg,
+    yAxis: "y"
+  };
+}
+
 test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => {
   t.mock.module("@lineandvertexsoftware/renderer-webgpu", {
     namedExports: {
@@ -149,6 +235,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
   const { HoverManager } = await import("../dist/HoverManager.js");
   const { AxisManager } = await import("../dist/AxisManager.js");
   const { ExportManager } = await import("../dist/ExportManager.js");
+  const { PickingEngine } = await import("../dist/PickingEngine.js");
   const { computeAxisDomain } = await import("../dist/scene.js");
 
   await t.test("zoom/pan triggers grid rebuild thresholds", () => {
@@ -583,6 +670,148 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       { traceIndex: 2, pointIndices: [0] }
     ]);
     assert.equal(selectEvents[0].lasso.svg.length, 4);
+  });
+
+  await t.test("hover and click resolve point metadata across trace families", async () => {
+    const traces = makeTraceFamilyInteractionTraces();
+    const sceneCompiler = new SceneCompiler();
+    sceneCompiler.compile(traces, mockAxisManager(), BASE_THEME, 420, 300, BASE_PADDING);
+
+    const state = () => ({
+      destroyed: false,
+      hoverThrottleMs: 0,
+      pickingMode: "cpu",
+      width: 420,
+      height: 300,
+      dpr: 1,
+      padding: BASE_PADDING,
+      zoom: BASE_ZOOM,
+      hoverRpx: 18,
+      traces,
+      theme: BASE_THEME
+    });
+    const axisManager = {
+      getHoverMode: () => "closest",
+      resolveAxisType: () => "linear"
+    };
+    const pickingEngine = new PickingEngine(
+      sceneCompiler,
+      { built: false },
+      state,
+      axisManager
+    );
+    const hoverEvents = [];
+    const clickEvents = [];
+    const hoverHighlights = [];
+    const hoverGuides = [];
+    const tooltip = tooltipElementStub();
+    const hoverManager = new HoverManager(
+      pickingEngine,
+      { setHoverHighlight: (highlight) => hoverHighlights.push(highlight) },
+      () => ({ setHoverGuides: (guide) => hoverGuides.push(guide) }),
+      tooltip,
+      state,
+      {
+        onHover: (event) => hoverEvents.push(event),
+        onClick: (event) => clickEvents.push(event)
+      },
+      axisManager,
+      sceneCompiler,
+      () => {}
+    );
+
+    const targets = [
+      { traceIndex: 0, pointIndex: 1, type: "scatter" },
+      { traceIndex: 1, pointIndex: 0, type: "bar" },
+      { traceIndex: 2, pointIndex: 1, type: "area" },
+      { traceIndex: 3, pointIndex: 2, type: "heatmap" },
+      { traceIndex: 4, pointIndex: 0, type: "histogram" }
+    ];
+
+    for (const target of targets) {
+      assert.equal(traces[target.traceIndex].type, target.type);
+      const event = hoverEventForCompiledPoint(sceneCompiler, pickingEngine, target.traceIndex, target.pointIndex);
+      const expected = expectedChartPoint(sceneCompiler, target.traceIndex, target.pointIndex, event);
+
+      hoverManager.onHover(event);
+      const hoverPoint = hoverEvents.at(-1).point;
+      assert.deepEqual(hoverPoint, expected);
+      assert.equal(tooltip.getAttribute("aria-hidden"), "false");
+      assert.match(tooltip.textContent, new RegExp(traces[target.traceIndex].name));
+
+      await hoverManager.handleClick(event);
+      assert.deepEqual(clickEvents.at(-1).point, expected);
+    }
+
+    assert.equal(sceneCompiler.markerNormByTrace.has(5), false, "hidden trace should not be pickable");
+    assert.equal(hoverHighlights.length, targets.length);
+    assert.equal(hoverGuides.length, targets.length);
+  });
+
+  await t.test("box select groups selected points across trace families and excludes hidden traces", () => {
+    const traces = makeTraceFamilyInteractionTraces();
+    const sceneCompiler = new SceneCompiler();
+    sceneCompiler.compile(traces, mockAxisManager(), BASE_THEME, 420, 300, BASE_PADDING);
+
+    const state = () => ({
+      destroyed: false,
+      hoverThrottleMs: 0,
+      pickingMode: "cpu",
+      width: 420,
+      height: 300,
+      dpr: 1,
+      padding: BASE_PADDING,
+      zoom: BASE_ZOOM,
+      hoverRpx: 18,
+      traces,
+      theme: BASE_THEME
+    });
+    const axisManager = {
+      getHoverMode: () => "closest",
+      resolveAxisType: () => "linear"
+    };
+    const pickingEngine = new PickingEngine(
+      sceneCompiler,
+      { built: false },
+      state,
+      axisManager
+    );
+    const selectEvents = [];
+    const hoverManager = new HoverManager(
+      pickingEngine,
+      { setHoverHighlight: () => {} },
+      () => undefined,
+      tooltipElementStub(),
+      state,
+      { onSelect: (event) => selectEvents.push(event) },
+      axisManager,
+      sceneCompiler,
+      () => {}
+    );
+
+    hoverManager.handleSelection({
+      x0Svg: 0,
+      y0Svg: 0,
+      x1Svg: 420,
+      y1Svg: 300,
+      x0Data: 0,
+      y0Data: 0,
+      x1Data: 1,
+      y1Data: 1
+    });
+
+    assert.equal(selectEvents.length, 1);
+    const selectedByTrace = new Map(selectEvents[0].points.map((entry) => [entry.traceIndex, entry.pointIndices]));
+    const expectedVisibleTraces = [0, 1, 2, 3, 4];
+    for (const traceIndex of expectedVisibleTraces) {
+      const count = sceneCompiler.markerNormByTrace.get(traceIndex).length / 2;
+      assert.deepEqual(selectedByTrace.get(traceIndex), Array.from({ length: count }, (_value, index) => index));
+    }
+    assert.equal(selectedByTrace.has(5), false, "legendonly trace should stay excluded from selection");
+    assert.equal(
+      selectEvents[0].totalPoints,
+      expectedVisibleTraces.reduce((sum, traceIndex) => sum + sceneCompiler.markerNormByTrace.get(traceIndex).length / 2, 0)
+    );
   });
 
   await t.test("tooltip formatter provides plain-text tooltip content", () => {
