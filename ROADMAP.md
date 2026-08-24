@@ -50,8 +50,8 @@ Not every missing feature must be in 1.0, but the remaining gaps still affect wh
 - ~~`setLayout()` currently replaces the layout object; the top-level README describes it as a merge-style API~~ (fixed and covered by tests)
 - ~~`tooltip.renderer` string output is written through `innerHTML`, so the safety contract is currently “trusted HTML only,” but that is not clearly documented or tested~~ (documented and covered by tests)
 - ~~Scatter traces with `mode: "lines"` appear to be non-pickable/non-selectable~~ (fixed for CPU picking and covered by tests)
-- Broader hover/click/select regression coverage is still needed across all implemented trace families
-- CPU/GPU picking fallback behavior still needs a clearer tested contract
+- ~~Broader hover/click/select regression coverage is still needed across all implemented trace families~~ (covered by tests)
+- ~~CPU/GPU picking fallback behavior still needs a clearer tested contract~~ (documented and covered by tests)
 
 These are the kinds of gaps that create churn after 1.0 because they force either behavior changes or documentation walk-backs.
 
@@ -73,8 +73,8 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 
 2. Close correctness gaps in the current feature set
 - ~~Fix or explicitly disallow unsupported picking cases, especially line-only scatter traces~~ (fixed and covered by tests)
-- Add regression tests for hover/click/select across all implemented trace families
-- Define and test the CPU/GPU picking fallback behavior
+- ~~Add regression tests for hover/click/select across all implemented trace families~~ (covered)
+- ~~Define and test the CPU/GPU picking fallback behavior~~ (documented and covered)
 
 3. Add the missing “core dashboard” features
 - ~~Secondary y-axis (`yaxis2`)~~ (shipped in 0.1.12)

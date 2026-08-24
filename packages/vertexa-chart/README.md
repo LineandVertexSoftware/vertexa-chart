@@ -52,6 +52,15 @@ Set `layout.uirevision` to preserve the visible zoom/pan data window across
 `setTraces()` and `setLayout()` updates. Keep it unchanged to preserve user
 interaction state; change it to reset zoom/pan intentionally.
 
+### Picking Modes
+
+`pickingMode` controls closest-point hover and click hit detection:
+
+- `"both"` is the default. It uses CPU picking first, then GPU picking can refine
+  the result. If the GPU pick misses or fails, the CPU result is kept.
+- `"cpu"` uses only the CPU grid/scan path.
+- `"gpu"` uses only the GPU pick result for closest-point hover/click.
+
 ### Hover Templates
 
 Set `hovertemplate` on traces for escaped token substitution:

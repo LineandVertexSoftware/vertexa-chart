@@ -119,7 +119,7 @@ new Chart(element: Element, options: ChartOptions)
 | `theme` | `ChartTheme` | Colors, fonts, grid, tooltip styling |
 | `a11y` | `A11yOptions` | `label`, `description`, `highContrast`, `keyboardNavigation` |
 | `toolbar` | `ToolbarOptions` | Built-in export/fullscreen toolbar (off by default) |
-| `pickingMode` | `"cpu" \| "gpu" \| "both"` | Hit-detection backend |
+| `pickingMode` | `"cpu" \| "gpu" \| "both"` | Hit-detection backend; defaults to `"both"` |
 | `onHover` | `(e: ChartHoverEvent) => void` | Pointer-move event |
 | `onClick` | `(e: ChartClickEvent) => void` | Point click |
 | `onZoom` | `(e: ChartZoomEvent) => void` | Zoom/pan change |
@@ -357,7 +357,8 @@ Only return trusted HTML strings. Use `formatter` for plain text.
 ## Performance notes
 
 - **LOD sampling** kicks in automatically above ~50 k visible points, keeping rendering smooth.
-- **`pickingMode: "both"`** (default) uses a CPU grid index for hover stability during pan and GPU picking for accurate hit detection in dense data.
+- **`pickingMode: "both"`** (default) uses CPU picking first for stable hover/click feedback, then lets GPU picking refine closest-point results when it resolves cleanly. If the GPU pass misses, fails, or returns no point, Vertexa Chart keeps the CPU result.
+- **`pickingMode: "cpu"`** uses only the CPU grid/scan path. **`pickingMode: "gpu"`** skips CPU fallback for closest-point hover/click and returns no point when the GPU pick does not resolve.
 - Use `setPerformanceMode("max-fps")` when rendering at high frequency; `"quality"` restores full resolution at rest and may sample briefly during active pan/zoom on very large marker sets.
 - Use `setViewTransform()` when synchronizing linked charts so followers apply one exact transform instead of separate zoom and pan steps.
 - Use `setInteractionRenderMode("next-frame")` for linked charts that should batch source and follower zoom/pan redraws into a single browser frame.

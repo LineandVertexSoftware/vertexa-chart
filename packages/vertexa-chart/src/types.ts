@@ -837,6 +837,12 @@ export type ChartOptions = {
   layout?: Layout;
   traces: Trace[];
 
+  /**
+   * Hit-detection backend for closest-point hover and click.
+   *
+   * Defaults to `"both"`: CPU picking supplies the initial result and GPU
+   * picking may refine it. GPU misses or failures keep the CPU result.
+   */
   pickingMode?: "cpu" | "gpu" | "both";
   /**
    * Redraw policy for user-driven zoom/pan interactions.

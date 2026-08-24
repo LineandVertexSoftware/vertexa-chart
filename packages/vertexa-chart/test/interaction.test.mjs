@@ -814,6 +814,209 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     );
   });
 
+  await t.test("click picking prefers GPU hits and falls back to CPU on GPU miss or failure", async () => {
+    const cpuHit = {
+      traceIndex: 0,
+      pointIndex: 1,
+      x: 1,
+      y: 2,
+      screenX: 120,
+      screenY: 130
+    };
+    const gpuHit = {
+      traceIndex: 1,
+      pointIndex: 0,
+      x: 10,
+      y: 20,
+      screenX: 220,
+      screenY: 230
+    };
+    const clickEvent = {
+      inside: true,
+      xSvg: 121,
+      ySvg: 131,
+      xPlot: 101,
+      yPlot: 111,
+      xData: 1,
+      yData: 2
+    };
+    const traces = [
+      { type: "scatter", x: [1], y: [2], mode: "markers" },
+      { type: "scatter", x: [10], y: [20], mode: "markers" }
+    ];
+    const sceneCompiler = {
+      traceYAxisBinding: new Map([[0, "y"], [1, "y2"]]),
+      heatmapHoverSizeByTrace: new Map()
+    };
+    const state = () => ({
+      destroyed: false,
+      hoverThrottleMs: 0,
+      pickingMode: "both",
+      width: 320,
+      height: 240,
+      dpr: 1,
+      padding: BASE_PADDING,
+      zoom: BASE_ZOOM,
+      traces,
+      theme: BASE_THEME
+    });
+    const pickingEngine = {
+      cpuPickClosest: spy(() => cpuHit),
+      idToHit: spy((id) => id === 2 ? gpuHit : null),
+      pickSnapX: spy(() => null),
+      pickSnapY: spy(() => null),
+      getNormPoint: spy(() => ({ xn: 0.5, yn: 0.5 })),
+      screenToPlot: spy((screenX, screenY) => ({ xPlot: screenX - BASE_PADDING.l, yPlot: screenY - BASE_PADDING.t }))
+    };
+    const clickEvents = [];
+
+    let nextPick = async () => 2;
+    const hoverManager = new HoverManager(
+      pickingEngine,
+      { pick: (...args) => nextPick(...args), setHoverHighlight: () => {} },
+      () => undefined,
+      tooltipElementStub(),
+      state,
+      { onClick: (event) => clickEvents.push(event) },
+      { getHoverMode: () => "closest", resolveAxisType: () => "linear" },
+      sceneCompiler,
+      () => {}
+    );
+
+    await hoverManager.handleClick(clickEvent);
+    assert.deepEqual(clickEvents.at(-1).point, {
+      traceIndex: 1,
+      pointIndex: 0,
+      x: 10,
+      y: 20,
+      screenX: 220,
+      screenY: 230,
+      yAxis: "y2"
+    });
+
+    nextPick = async () => 0;
+    await hoverManager.handleClick(clickEvent);
+    assert.deepEqual(clickEvents.at(-1).point, {
+      traceIndex: 0,
+      pointIndex: 1,
+      x: 1,
+      y: 2,
+      screenX: 120,
+      screenY: 130,
+      yAxis: "y"
+    });
+
+    nextPick = async () => {
+      throw new Error("GPU pick unavailable");
+    };
+    await hoverManager.handleClick(clickEvent);
+    assert.deepEqual(clickEvents.at(-1).point, {
+      traceIndex: 0,
+      pointIndex: 1,
+      x: 1,
+      y: 2,
+      screenX: 120,
+      screenY: 130,
+      yAxis: "y"
+    });
+  });
+
+  await t.test("hover picking keeps CPU result when async GPU refinement misses or fails", async () => {
+    const cpuHit = {
+      traceIndex: 0,
+      pointIndex: 0,
+      x: 1,
+      y: 2,
+      screenX: 120,
+      screenY: 130
+    };
+    const gpuHit = {
+      traceIndex: 0,
+      pointIndex: 1,
+      x: 3,
+      y: 4,
+      screenX: 180,
+      screenY: 190
+    };
+    const hoverEvent = {
+      inside: true,
+      xSvg: 121,
+      ySvg: 131,
+      xPlot: 101,
+      yPlot: 111,
+      xData: 1,
+      yData: 2
+    };
+    const traces = [
+      { type: "scatter", name: "Fallback", x: [1, 3], y: [2, 4], mode: "markers" }
+    ];
+    const sceneCompiler = {
+      traceYAxisBinding: new Map([[0, "y"]]),
+      heatmapHoverSizeByTrace: new Map()
+    };
+    const state = () => ({
+      destroyed: false,
+      hoverThrottleMs: 0,
+      pickingMode: "both",
+      width: 320,
+      height: 240,
+      dpr: 1,
+      padding: BASE_PADDING,
+      zoom: BASE_ZOOM,
+      traces,
+      theme: BASE_THEME
+    });
+    const pickingEngine = {
+      cpuPickClosest: spy(() => cpuHit),
+      idToHit: spy((id) => id === 2 ? gpuHit : null),
+      getNormPoint: spy((traceIndex, pointIndex) => ({ xn: pointIndex === 0 ? 0.25 : 0.75, yn: 0.5 })),
+      screenToPlot: spy((screenX, screenY) => ({ xPlot: screenX - BASE_PADDING.l, yPlot: screenY - BASE_PADDING.t }))
+    };
+    const hoverEvents = [];
+    const highlights = [];
+    const guides = [];
+
+    let nextPick = async () => 0;
+    const hoverManager = new HoverManager(
+      pickingEngine,
+      {
+        pick: (...args) => nextPick(...args),
+        setHoverHighlight: (highlight) => highlights.push(highlight)
+      },
+      () => ({ setHoverGuides: (guide) => guides.push(guide) }),
+      tooltipElementStub(),
+      state,
+      { onHover: (event) => hoverEvents.push(event) },
+      { getHoverMode: () => "closest", resolveAxisType: () => "linear" },
+      sceneCompiler,
+      () => {}
+    );
+
+    hoverManager.onHover(hoverEvent);
+    await Promise.resolve();
+    assert.equal(hoverEvents.length, 1);
+    assert.equal(hoverEvents[0].point.pointIndex, 0);
+    assert.equal(highlights.length, 1);
+    assert.equal(guides.length, 1);
+
+    nextPick = async () => {
+      throw new Error("GPU pick unavailable");
+    };
+    hoverManager.onHover({ ...hoverEvent, xSvg: 122, ySvg: 132 });
+    await Promise.resolve();
+    assert.equal(hoverEvents.length, 2);
+    assert.equal(hoverEvents[1].point.pointIndex, 0);
+    assert.equal(highlights.length, 2);
+
+    nextPick = async () => 2;
+    hoverManager.onHover({ ...hoverEvent, xSvg: 123, ySvg: 133 });
+    await Promise.resolve();
+    assert.equal(hoverEvents.length, 4);
+    assert.equal(hoverEvents[2].point.pointIndex, 0);
+    assert.equal(hoverEvents[3].point.pointIndex, 1);
+    assert.equal(highlights.length, 4);
+  });
+
   await t.test("tooltip formatter provides plain-text tooltip content", () => {
     const tooltip = tooltipElementStub();
 
