@@ -158,6 +158,16 @@ function resetHarness() {
   jsWindow.document.body.replaceChildren();
 }
 
+function svgLayerDraws() {
+  return canvasOps.filter((op) => op[0] === "drawImage" && op[2] instanceof ImageStub);
+}
+
+function decodeSvgLayerDraw(op) {
+  const src = op[2].src;
+  assert.ok(src.startsWith("data:image/svg+xml;charset=utf-8,"));
+  return decodeURIComponent(src.slice("data:image/svg+xml;charset=utf-8,".length));
+}
+
 function mixedTraces() {
   return [
     {
@@ -263,6 +273,35 @@ test("mixed chart export regressions", async (t) => {
     chart.destroy();
   });
 
+  await t.test("exportPng honors includeGrid and includeOverlay flags", async () => {
+    resetHarness();
+    const chart = await makeMixedChart(Chart);
+
+    await chart.exportPng({ includeGrid: false, includeOverlay: false });
+    assert.equal(createdRenderers.at(-1).captureCalls.length, 1);
+    assert.equal(canvasOps.filter((op) => op[0] === "putImageData").length, 1);
+    assert.equal(svgLayerDraws().length, 0);
+    chart.destroy();
+
+    resetHarness();
+    const overlayOnlyChart = await makeMixedChart(Chart);
+    await overlayOnlyChart.exportPng({ includeGrid: false, includeOverlay: true });
+    let draws = svgLayerDraws();
+    assert.equal(draws.length, 1);
+    assert.doesNotMatch(decodeSvgLayerDraw(draws[0]), /grid-regression-layer/);
+    assert.match(decodeSvgLayerDraw(draws[0]), /legend-regression-layer/);
+    overlayOnlyChart.destroy();
+
+    resetHarness();
+    const gridOnlyChart = await makeMixedChart(Chart);
+    await gridOnlyChart.exportPng({ includeGrid: true, includeOverlay: false });
+    draws = svgLayerDraws();
+    assert.equal(draws.length, 1);
+    assert.match(decodeSvgLayerDraw(draws[0]), /grid-regression-layer/);
+    assert.doesNotMatch(decodeSvgLayerDraw(draws[0]), /legend-regression-layer/);
+    gridOnlyChart.destroy();
+  });
+
   await t.test("exportSvg embeds the mixed plot image and serializes grid and overlay layers", async () => {
     resetHarness();
     const chart = await makeMixedChart(Chart);
@@ -280,6 +319,40 @@ test("mixed chart export regressions", async (t) => {
     assert.match(markup, /legend-regression-layer/);
 
     chart.destroy();
+  });
+
+  await t.test("exportSvg honors includePlot, includeGrid, and includeOverlay flags", async () => {
+    resetHarness();
+    const overlayOnlyChart = await makeMixedChart(Chart);
+    const overlayOnlyRenderer = createdRenderers.at(-1);
+
+    const overlayOnly = await overlayOnlyChart.exportSvg({
+      includePlot: false,
+      includeGrid: false,
+      includeOverlay: true
+    });
+    const overlayOnlyMarkup = await overlayOnly.text();
+    assert.equal(overlayOnlyRenderer.captureCalls.length, 0);
+    assert.doesNotMatch(overlayOnlyMarkup, /<image\b/);
+    assert.doesNotMatch(overlayOnlyMarkup, /grid-regression-layer/);
+    assert.match(overlayOnlyMarkup, /legend-regression-layer/);
+    overlayOnlyChart.destroy();
+
+    resetHarness();
+    const gridAndPlotChart = await makeMixedChart(Chart);
+    const gridAndPlotRenderer = createdRenderers.at(-1);
+
+    const gridAndPlot = await gridAndPlotChart.exportSvg({
+      includePlot: true,
+      includeGrid: true,
+      includeOverlay: false
+    });
+    const gridAndPlotMarkup = await gridAndPlot.text();
+    assert.equal(gridAndPlotRenderer.captureCalls.length, 1);
+    assert.match(gridAndPlotMarkup, /<image\b/);
+    assert.match(gridAndPlotMarkup, /grid-regression-layer/);
+    assert.doesNotMatch(gridAndPlotMarkup, /legend-regression-layer/);
+    gridAndPlotChart.destroy();
   });
 
   await t.test("exportCsvPoints flattens mixed trace families and excludes hidden rows by default", async () => {

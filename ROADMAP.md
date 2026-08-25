@@ -83,7 +83,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 
 4. Harden tooltip and export behavior
 - ~~Either sanitize custom tooltip HTML or document `tooltip.renderer` as trusted HTML only~~ (documented as trusted HTML)
-- Add dedicated regression tests for PNG, SVG, and CSV export on mixed-layer charts
+- ~~Add dedicated regression tests for PNG, SVG, and CSV export on mixed-layer charts~~ (covered, including export option flags and toolbar downloads)
 
 5. Raise the release bar
 - Expand visual regression coverage to bar, area, heatmap, histogram, toolbar, legend, and selection states
@@ -119,7 +119,7 @@ Target: immediate next milestone
 
 - Audit docs against implementation and remove contradictions
 - ~~Fix line-only picking/select behavior or formally mark it unsupported~~ (fixed for CPU picking)
-- ~~Add tests for tooltip security contract~~ and export behavior
+- ~~Add tests for tooltip security contract and export behavior~~ (covered)
 - ~~Expand visual coverage beyond the current 3 snapshot scenarios~~ (expanded to 7 deterministic scenarios)
 
 ### Phase 2: 1.0 blockers

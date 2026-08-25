@@ -12,8 +12,26 @@ globalThis.document = jsWindow.document;
 globalThis.Element = jsWindow.Element;
 globalThis.Node = jsWindow.Node;
 // Patch APIs jsdom doesn't fully implement
-jsWindow.URL.createObjectURL = () => "blob:test-url";
-jsWindow.URL.revokeObjectURL = () => {};
+const objectUrlCalls = [];
+const revokedUrls = [];
+const clickedDownloads = [];
+globalThis.URL.createObjectURL = (blob) => {
+  const url = `blob:test-url-${objectUrlCalls.length + 1}`;
+  objectUrlCalls.push({ blob, url });
+  return url;
+};
+globalThis.URL.revokeObjectURL = (url) => {
+  revokedUrls.push(url);
+};
+jsWindow.URL.createObjectURL = globalThis.URL.createObjectURL;
+jsWindow.URL.revokeObjectURL = globalThis.URL.revokeObjectURL;
+jsWindow.HTMLAnchorElement.prototype.click = function click() {
+  clickedDownloads.push({
+    href: this.getAttribute("href"),
+    download: this.getAttribute("download"),
+    connected: this.isConnected
+  });
+};
 Object.defineProperty(jsWindow.document, "fullscreenElement", {
   get: () => null,
   configurable: true
@@ -63,12 +81,18 @@ function makeSpy(impl = () => undefined) {
   return fn;
 }
 
+function resetDownloadSpies() {
+  objectUrlCalls.length = 0;
+  revokedUrls.length = 0;
+  clickedDownloads.length = 0;
+}
+
 test("Toolbar", async (t) => {
   t.mock.module("@lineandvertexsoftware/renderer-webgpu", {
-    namedExports: { WebGPURenderer: class {} }
+    exports: { WebGPURenderer: class {} }
   });
   t.mock.module("@lineandvertexsoftware/overlay-d3", {
-    namedExports: { OverlayD3: class {} }
+    exports: { OverlayD3: class {} }
   });
 
   const { Toolbar } = await import("../dist/Toolbar.js");
@@ -188,6 +212,7 @@ test("Toolbar", async (t) => {
   });
 
   await t.test("export menu click calls exportPng callback", async () => {
+    resetDownloadSpies();
     const container = jsWindow.document.createElement("div");
     const callbacks = makeCallbacks();
     const toolbar = new Toolbar(container, FULL_CONFIG, BASE_THEME, BASE_A11Y, callbacks);
@@ -199,9 +224,12 @@ test("Toolbar", async (t) => {
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(callbacks.exportPng.calls.length, 1);
     assert.deepEqual(callbacks.exportPng.calls[0], [{ pixelRatio: 1 }]);
+    assert.equal(objectUrlCalls.length, 1);
+    assert.equal(revokedUrls[0], objectUrlCalls[0].url);
   });
 
   await t.test("export menu click calls exportCsvPoints callback", async () => {
+    resetDownloadSpies();
     const container = jsWindow.document.createElement("div");
     const callbacks = makeCallbacks();
     const toolbar = new Toolbar(container, FULL_CONFIG, BASE_THEME, BASE_A11Y, callbacks);
@@ -211,6 +239,92 @@ test("Toolbar", async (t) => {
     csvBtn.click();
     await new Promise((resolve) => setTimeout(resolve, 20));
     assert.equal(callbacks.exportCsvPoints.calls.length, 1);
+    assert.deepEqual(callbacks.exportCsvPoints.calls[0], [{}]);
+    assert.equal(objectUrlCalls.length, 1);
+  });
+
+  await t.test("export menu downloads png svg and csv with sanitized timestamped filenames", async () => {
+    resetDownloadSpies();
+    const originalNow = Date.now;
+    Date.now = () => 1234567890;
+    try {
+      const container = jsWindow.document.createElement("div");
+      const callbacks = makeCallbacks();
+      const toolbar = new Toolbar(
+        container,
+        {
+          ...FULL_CONFIG,
+          exportFormats: ["png", "svg", "csv"],
+          exportPixelRatio: 3,
+          exportFilename: "Revenue / Ops Chart"
+        },
+        BASE_THEME,
+        BASE_A11Y,
+        callbacks
+      );
+
+      for (const format of ["png", "svg", "csv"]) {
+        toolbar["exportButton"].click();
+        toolbar["exportMenu"].querySelector(`button[data-vx-export-format='${format}']`).click();
+        await new Promise((resolve) => setTimeout(resolve, 20));
+      }
+
+      assert.deepEqual(callbacks.exportPng.calls, [[{ pixelRatio: 3 }]]);
+      assert.deepEqual(callbacks.exportSvg.calls, [[{ pixelRatio: 3 }]]);
+      assert.deepEqual(callbacks.exportCsvPoints.calls, [[{}]]);
+      assert.deepEqual(
+        clickedDownloads.map((entry) => entry.download),
+        [
+          "Revenue-Ops-Chart-1234567890.png",
+          "Revenue-Ops-Chart-1234567890.svg",
+          "Revenue-Ops-Chart-points-1234567890.csv"
+        ]
+      );
+      assert.deepEqual(clickedDownloads.map((entry) => entry.href), [
+        "blob:test-url-1",
+        "blob:test-url-2",
+        "blob:test-url-3"
+      ]);
+      assert.deepEqual(revokedUrls, ["blob:test-url-1", "blob:test-url-2", "blob:test-url-3"]);
+      assert.deepEqual(clickedDownloads.map((entry) => entry.connected), [true, true, true]);
+    } finally {
+      Date.now = originalNow;
+    }
+  });
+
+  await t.test("export menu keeps controls disabled while export is pending and restores them", async () => {
+    resetDownloadSpies();
+    let resolveExport;
+    const pendingBlob = new Promise((resolve) => {
+      resolveExport = () => resolve(new jsWindow.Blob(["png"], { type: "image/png" }));
+    });
+    const container = jsWindow.document.createElement("div");
+    const callbacks = {
+      ...makeCallbacks(),
+      exportPng: makeSpy(() => pendingBlob)
+    };
+    const toolbar = new Toolbar(container, FULL_CONFIG, BASE_THEME, BASE_A11Y, callbacks);
+
+    toolbar["exportButton"].click();
+    const pngBtn = toolbar["exportMenu"].querySelector("button[data-vx-export-format='png']");
+    const csvBtn = toolbar["exportMenu"].querySelector("button[data-vx-export-format='csv']");
+    pngBtn.click();
+
+    assert.equal(callbacks.exportPng.calls.length, 1);
+    assert.equal(toolbar["exportBusy"], true);
+    assert.equal(toolbar["exportButton"].disabled, true);
+    assert.equal(pngBtn.disabled, true);
+    assert.equal(csvBtn.disabled, true);
+
+    resolveExport();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.equal(toolbar["exportBusy"], false);
+    assert.equal(toolbar["exportButton"].disabled, false);
+    assert.equal(pngBtn.disabled, false);
+    assert.equal(csvBtn.disabled, false);
+    assert.equal(toolbar["exportOpen"], false);
+    assert.equal(clickedDownloads.length, 1);
   });
 
   await t.test("cleanup nullifies all element refs", () => {
