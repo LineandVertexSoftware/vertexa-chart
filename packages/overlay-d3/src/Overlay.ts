@@ -295,7 +295,8 @@ export class OverlayD3 {
       .append("rect")
       .attr("class", "zoom-rect")
       .attr("fill", "transparent")
-      .style("cursor", "crosshair");
+      .style("cursor", "crosshair")
+      .style("touch-action", "none");
 
     this.gridStyle = resolveGridStyle(opts.grid);
     this.annotations = opts.annotations ?? [];

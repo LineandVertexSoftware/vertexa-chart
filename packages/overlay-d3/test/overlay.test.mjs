@@ -180,6 +180,33 @@ test("OverlayD3", async (t) => {
     assert.ok(opts.svg.querySelector("rect") !== null, "zoom capture rect should exist");
   });
 
+  await t.test("zoom capture rect is configured for touch pan and pinch gestures", () => {
+    const previousTouchPoints = globalThis.navigator.maxTouchPoints;
+    Object.defineProperty(globalThis.navigator, "maxTouchPoints", {
+      value: 2,
+      configurable: true
+    });
+
+    try {
+      const opts = makeOpts();
+      new OverlayD3(opts);
+      const zoomRect = opts.svg.querySelector(".zoom-rect");
+      assert.ok(zoomRect !== null, "zoom capture rect should exist");
+      assert.equal(zoomRect.style.touchAction, "none");
+
+      const listeners = (zoomRect.__on ?? []).map((entry) => `${entry.type}.${entry.name}`);
+      assert.ok(listeners.includes("touchstart.zoom"));
+      assert.ok(listeners.includes("touchmove.zoom"));
+      assert.ok(listeners.includes("touchend.zoom"));
+      assert.ok(listeners.includes("touchcancel.zoom"));
+    } finally {
+      Object.defineProperty(globalThis.navigator, "maxTouchPoints", {
+        value: previousTouchPoints,
+        configurable: true
+      });
+    }
+  });
+
   await t.test("destroy() does not throw", () => {
     const overlay = new OverlayD3(makeOpts());
     assert.doesNotThrow(() => overlay.destroy());

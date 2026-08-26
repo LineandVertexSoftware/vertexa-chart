@@ -59,7 +59,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 
 - ~~Visual regression currently covers only `getting-started`, `axis-grid`, and `events-api`~~ (expanded to 7 deterministic scenarios)
 - Broad visual coverage now includes grouped bars, time bars, heatmap, area fills, histogram, toolbar controls, legend states, and selected-state UI
-- Mobile/touch behavior largely depends on D3 defaults and is not explicitly hardened
+- Mobile/touch expectations are documented and the D3 touch zoom surface is smoke-tested; deeper device QA is still pending
 - Performance claims are plausible, and `RELEASE.md` now defines a local baseline; automated threshold enforcement is still pending
 
 ## What I would require before calling this 1.0
@@ -94,7 +94,7 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 
 - ~~Range slider + range selector~~ (shipped in 0.1.13)
 - Unified hover / shared crosshair mode for dense time series
-- Mobile gesture hardening
+- Mobile gesture hardening beyond documented pan/pinch zoom
 - User-facing decimation or downsampling controls
 
 These are the first features I would pull forward if the goal is “replace incumbent charting libs in real dashboards,” not just “ship a solid chart engine.”

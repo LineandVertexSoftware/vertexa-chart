@@ -176,6 +176,17 @@ When the chart container has focus:
 | `Shift + drag` | Box selection |
 | `Shift + Alt + drag` | Lasso selection |
 
+### Touch and mobile interaction
+
+Touch devices use the same plot overlay for pan and pinch zoom. The plot capture
+surface disables native page gestures while a touch interaction starts on the
+chart, so one-finger pan and two-finger pinch are owned by the chart area.
+
+Hover and tooltip behavior is pointer-hover first; touch devices should rely on
+tap/click callbacks and visible chart state instead of persistent hover. Box and
+lasso selection currently require mouse dragging with keyboard modifiers
+(`Shift` and `Shift + Alt`) and are not exposed as dedicated touch gestures.
+
 ---
 
 ## Layout options

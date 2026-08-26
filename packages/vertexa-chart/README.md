@@ -52,6 +52,12 @@ Set `layout.uirevision` to preserve the visible zoom/pan data window across
 `setTraces()` and `setLayout()` updates. Keep it unchanged to preserve user
 interaction state; change it to reset zoom/pan intentionally.
 
+### Touch and Mobile
+
+Touch devices can pan and pinch zoom in the plot area. Tap/click callbacks are
+supported, but hover is pointer-hover first. Box and lasso selection currently
+require mouse dragging with keyboard modifiers rather than touch gestures.
+
 ### Picking Modes
 
 `pickingMode` controls closest-point hover and click hit detection:
