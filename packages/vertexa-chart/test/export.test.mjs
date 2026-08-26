@@ -237,12 +237,12 @@ async function makeMixedChart(Chart) {
 
 test("mixed chart export regressions", async (t) => {
   t.mock.module("@lineandvertexsoftware/renderer-webgpu", {
-    exports: {
+    namedExports: {
       WebGPURenderer: WebGPURendererStub
     }
   });
   t.mock.module("@lineandvertexsoftware/overlay-d3", {
-    exports: {
+    namedExports: {
       OverlayD3: OverlayD3Stub
     }
   });
