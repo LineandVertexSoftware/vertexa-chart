@@ -8,6 +8,10 @@ Core chart API for Vertexa Chart.
 npm install @lineandvertexsoftware/vertexa-chart
 ```
 
+The supported runtime API and semver contract are documented in the monorepo
+public contract:
+[https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/PUBLIC_CONTRACT.md](https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/PUBLIC_CONTRACT.md)
+
 ## Usage
 
 ```ts
@@ -98,12 +102,15 @@ and `%{z}` for heatmaps.
 - `setSize(width, height)`
 - `panBy(dxCss, dyCss)`
 - `zoomBy(factor, centerPlot?)`
+- `setViewTransform(transform, options?)`
+- `setInteractionRenderMode(mode)`
 - `resetView()`
 - `fitToData()`
 - `autoscaleY()`
 - `setAspectLock(enabled)`
 - `setPerformanceMode(mode)`
 - `getPerformanceStats()`
+- `setXRange(x0, x1)`
 - `destroy()`
 
 For full examples and docs, see the monorepo README:

@@ -4,7 +4,7 @@ Last updated: August 23, 2026
 
 ## Release assessment
 
-Vertexa Chart already has a credible beta-level foundation:
+Current state:
 
 - WebGPU renderer with marker, line, hover, and GPU pick pipelines
 - D3 overlay for axes, grid, legend, zoom/pan, hover guides, and box/lasso selection
@@ -13,7 +13,8 @@ Vertexa Chart already has a credible beta-level foundation:
 - Unit tests across renderer, overlay, interactions, data mutation, histogram logic, DOM mounting, and toolbar behavior
 - A demo app plus a small visual snapshot harness
 
-I would not call the current codebase a 1.0 yet. It looks closer to a strong `0.x` / public beta release: the core is real, but a few common product expectations are still missing and the hardening bar is not high enough for a stable major release.
+The code is close to a stable release, but a few checks still need to be boring
+and repeatable before tagging `1.0.0`.
 
 ## What exists today
 
@@ -34,7 +35,7 @@ I would not call the current codebase a 1.0 yet. It looks closer to a strong `0.
 
 ## Important gaps and risks
 
-These are the main reasons I would hold back a `1.0.0` tag.
+Remaining items that should be settled before `1.0.0`.
 
 ### 1. Missing common “core charting” features
 
@@ -43,7 +44,8 @@ These are the main reasons I would hold back a `1.0.0` tag.
 - ~~No built-in range slider or range selector~~ (shipped in 0.1.13)
 - No subplots/faceting support
 
-Not every missing feature must be in 1.0, but the remaining gaps still affect whether the library feels “major-version complete.”
+Not every missing chart feature belongs in 1.0. The remaining question is which
+ones are part of the supported dashboard baseline and which ones move to 1.1.
 
 ### 2. A few correctness and contract issues still need tightening
 
@@ -53,7 +55,8 @@ Not every missing feature must be in 1.0, but the remaining gaps still affect wh
 - ~~Broader hover/click/select regression coverage is still needed across all implemented trace families~~ (covered by tests)
 - ~~CPU/GPU picking fallback behavior still needs a clearer tested contract~~ (documented and covered by tests)
 
-These are the kinds of gaps that create churn after 1.0 because they force either behavior changes or documentation walk-backs.
+The fixed items above are now covered by tests or docs so they do not turn into
+post-1.0 behavior changes.
 
 ### 3. The quality gate is still too thin for a stable major
 
@@ -62,14 +65,14 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 - Mobile/touch expectations are documented and the D3 touch zoom surface is smoke-tested; deeper device QA is still pending
 - Performance claims are plausible, and `RELEASE.md` now defines a local baseline; automated threshold enforcement is still pending
 
-## What I would require before calling this 1.0
+## Required before 1.0
 
 ### P0: Must ship before `1.0.0`
 
 1. Lock the public contract
-- Decide the supported public API surface and document it in one place
-- Align README/API docs with actual behavior
-- Explicitly document WebGPU-only support and supported browser expectations
+- ~~Decide the supported public API surface and document it in one place~~ (`PUBLIC_CONTRACT.md`)
+- ~~Align README/API docs with actual behavior~~ (public contract linked from package docs)
+- ~~Explicitly document WebGPU-only support and supported browser expectations~~ (`README.md` and `PUBLIC_CONTRACT.md`)
 
 2. Close correctness gaps in the current feature set
 - ~~Fix or explicitly disallow unsupported picking cases, especially line-only scatter traces~~ (fixed and covered by tests)
@@ -90,18 +93,19 @@ These are the kinds of gaps that create churn after 1.0 because they force eithe
 - ~~Define a simple performance baseline and acceptable regression threshold~~ (documented in `RELEASE.md`)
 - Treat `build`, `typecheck`, `test`, and `pack:check` as the minimum release gate
 
-### P1: Strong candidates for 1.0 if the target user is dashboard/product teams
+### P1: Good candidates if 1.0 targets dashboard/product teams
 
 - ~~Range slider + range selector~~ (shipped in 0.1.13)
 - Unified hover / shared crosshair mode for dense time series
 - Mobile gesture hardening beyond documented pan/pinch zoom
 - User-facing decimation or downsampling controls
 
-These are the first features I would pull forward if the goal is “replace incumbent charting libs in real dashboards,” not just “ship a solid chart engine.”
+These are useful for real dashboard adoption, but they can also land after 1.0
+if the public contract stays honest about what is supported.
 
 ### Not required for 1.0
 
-These are valuable, but I would treat them as `1.1+` work:
+Useful later, but not required for the first stable API:
 
 - Error bars
 - Candlestick / OHLC
@@ -129,7 +133,7 @@ Target: `1.0.0`
 - ~~Add `yaxis2` and per-trace axis binding~~ (shipped in 0.1.12)
 - ~~Add interaction-state persistence across layout/data updates~~ (shipped)
 - Tighten interaction correctness across all existing trace types
-- Publish a clean “supported features” matrix
+- ~~Publish a clean “supported features” matrix~~ (`PUBLIC_CONTRACT.md`)
 
 ### Phase 3: Release candidate
 
@@ -138,7 +142,7 @@ Target: `1.0.0-rc`
 - Run full release check in CI and locally
 - Verify package contents and install flow
 - Add one demo example per major supported trace family / workflow
-- Freeze semver expectations for the public runtime API
+- ~~Freeze semver expectations for the public runtime API~~ (`PUBLIC_CONTRACT.md`)
 
 ### Phase 4: Post-1.0 expansion
 
@@ -151,9 +155,9 @@ Target: `1.1.x` and later
 - Distribution traces
 - Subplots and animation
 
-## Suggested 1.0 definition of done
+## 1.0 definition of done
 
-Call the project `1.0` when all of the following are true:
+Tag `1.0.0` when all of the following are true:
 
 - The README describes the product that actually ships today
 - All currently advertised trace types and interactions behave correctly under test
@@ -162,11 +166,7 @@ Call the project `1.0` when all of the following are true:
 - Release checks pass cleanly
 - The team is willing to preserve the documented API under semver
 
-## Bottom line
-
-The codebase is already beyond a toy or prototype. It has enough substance to justify a public beta today.
-
-The shortest honest path to `1.0` is not “add lots more trace types.” It is:
+## Short path to 1.0
 
 1. Harden the features already present
 2. ~~Add secondary-axis~~ (done) and ~~state-persistence support~~ (done)

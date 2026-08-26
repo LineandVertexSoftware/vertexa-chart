@@ -1,6 +1,6 @@
 # vertexa-chart
 
-**GPU-accelerated charting for the browser — WebGPU rendering with a D3 overlay for axes, zoom/pan, legend, tooltips, and data selection.**
+**WebGPU charts with a D3 SVG overlay for axes, zoom/pan, legends, tooltips, and selection.**
 
 [![npm](https://img.shields.io/npm/v/@lineandvertexsoftware/vertexa-chart)](https://www.npmjs.com/package/@lineandvertexsoftware/vertexa-chart)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
@@ -11,19 +11,22 @@
 
 ## Release process
 
-See [RELEASE.md](RELEASE.md) for the local release baseline, including package
-checks, visual snapshots, benchmark comparison, and npm publish commands.
+Release checks and npm publish notes live in [RELEASE.md](RELEASE.md). The
+supported API surface is documented in [PUBLIC_CONTRACT.md](PUBLIC_CONTRACT.md).
 
 ---
 
-## Why vertexa-chart?
+## What it does
 
-- **GPU rendering** — WebGPU pipelines handle scatter, line, bar, area, and heatmap traces at 60 fps even with millions of points.
-- **Interactive D3 overlay** — axes, legend, zoom/pan, hover guides, box/lasso selection, and annotations are all SVG-rendered via D3.
-- **Streaming-ready** — `appendPoints()` pushes incremental data with optional sliding-window eviction.
-- **Framework-agnostic** — plain TypeScript; no React, Vue, or Angular required.
-- **Typed API** — full TypeScript types for traces, layout, theme, events, and export options.
-- **Built-in accessibility** — keyboard navigation, ARIA labels, and high-contrast mode.
+- WebGPU rendering for scatter, line, bar, area, heatmap, and histogram traces.
+- D3-rendered SVG overlay for axes, grid, legends, annotations, hover guides,
+  zoom/pan, and box/lasso selection.
+- Incremental data updates through `appendPoints()`, including optional
+  sliding-window trimming.
+- Framework-independent TypeScript API.
+- Typed traces, layout, theme, events, toolbar, and export options.
+- Keyboard navigation, ARIA labels, live tooltip region, and high-contrast theme
+  defaults.
 
 ---
 
@@ -50,7 +53,8 @@ npm install @lineandvertexsoftware/vertexa-chart
 pnpm add @lineandvertexsoftware/vertexa-chart
 ```
 
-> **Note:** This package is ESM-only (`"type": "module"`). Bundlers that support ESM (Vite, webpack 5, Rollup, esbuild) work out of the box.
+> **Note:** This package is ESM-only (`"type": "module"`). It is intended for
+> ESM-capable bundlers such as Vite, webpack 5, Rollup, and esbuild.
 
 ---
 
@@ -81,7 +85,7 @@ const chart = new Chart(document.querySelector("#chart")!, {
   onClick: (e) => console.log("click", e.point)
 });
 
-// Push new data without a full redraw
+// Append without replacing every trace.
 chart.appendPoints([{ traceIndex: 0, x: [5], y: [17], maxPoints: 100 }]);
 ```
 
@@ -105,28 +109,28 @@ chart.appendPoints([{ traceIndex: 0, x: [5], y: [17], maxPoints: 100 }]);
 ### Constructor
 
 ```ts
-new Chart(element: Element, options: ChartOptions)
+new Chart(target: string | HTMLElement, options: ChartOptions)
 ```
 
-`ChartOptions` accepts:
+Common `ChartOptions` fields:
 
 | Option | Type | Description |
 |---|---|---|
 | `width` | `number` | Initial width in CSS pixels |
 | `height` | `number` | Initial height in CSS pixels |
-| `traces` | `Trace[]` | Array of trace definitions |
+| `traces` | `Trace[]` | Trace definitions |
 | `layout` | `Layout` | Axes, annotations, title, hover mode |
 | `theme` | `ChartTheme` | Colors, fonts, grid, tooltip styling |
-| `a11y` | `A11yOptions` | `label`, `description`, `highContrast`, `keyboardNavigation` |
-| `toolbar` | `ToolbarOptions` | Built-in export/fullscreen toolbar (off by default) |
+| `a11y` | `ChartA11yOptions` | `label`, `description`, `highContrast`, `keyboardNavigation` |
+| `toolbar` | `ChartToolbarOptions` | Built-in export/fullscreen toolbar (off by default) |
 | `pickingMode` | `"cpu" \| "gpu" \| "both"` | Hit-detection backend; defaults to `"both"` |
 | `onHover` | `(e: ChartHoverEvent) => void` | Pointer-move event |
 | `onClick` | `(e: ChartClickEvent) => void` | Point click |
 | `onZoom` | `(e: ChartZoomEvent) => void` | Zoom/pan change |
 | `onLegendToggle` | `(e: ChartLegendToggleEvent) => void` | Legend item click |
 | `onSelect` | `(e: ChartSelectionEvent) => void` | Box/lasso selection complete |
-| `onRangeChange` | `(range: { x0: Datum; x1: Datum }) => void` | Fires when the visible x-range changes via slider, selector, or `setXRange()` |
-| `tooltip` | `TooltipOptions` | Custom `formatter` or `renderer` function |
+| `onRangeChange` | `(range: { x0: Datum; x1: Datum }) => void` | Fires when the visible x-range changes via slider, selector, zoom/pan, or `setXRange()` |
+| `tooltip` | `ChartTooltipOptions` | Custom `formatter` or `renderer` function |
 
 ### Instance methods
 
@@ -152,9 +156,9 @@ new Chart(element: Element, options: ChartOptions)
 | `exportCsvPoints(options?)` | Export chart data as CSV — `Blob` |
 | `destroy()` | Release all GPU and DOM resources |
 
-`setLayout()` merges the provided patch into the current layout. Nested objects like
+`setLayout()` merges the patch into the current layout. Nested objects like
 `xaxis`, `yaxis`, `grid`, `legend`, `margin`, `rangeSlider`, and `rangeSelector` are
-shallow-merged; arrays like `annotations` replace the previous value.
+shallow-merged. Arrays like `annotations` replace the previous value.
 
 Set `layout.uirevision` to preserve user zoom/pan state across `setTraces()` and
 `setLayout()` updates. While the value is unchanged, Vertexa Chart keeps the
@@ -178,14 +182,14 @@ When the chart container has focus:
 
 ### Touch and mobile interaction
 
-Touch devices use the same plot overlay for pan and pinch zoom. The plot capture
-surface disables native page gestures while a touch interaction starts on the
-chart, so one-finger pan and two-finger pinch are owned by the chart area.
+Touch devices use the same plot overlay for pan and pinch zoom. When a touch
+starts in the plot area, the chart disables native page gestures for that
+surface so one-finger pan and two-finger pinch stay in the chart.
 
-Hover and tooltip behavior is pointer-hover first; touch devices should rely on
-tap/click callbacks and visible chart state instead of persistent hover. Box and
-lasso selection currently require mouse dragging with keyboard modifiers
-(`Shift` and `Shift + Alt`) and are not exposed as dedicated touch gestures.
+Hover and tooltip behavior is pointer-hover first. On touch devices, use
+tap/click callbacks and visible chart state instead of relying on persistent
+hover. Box and lasso selection currently require mouse dragging with keyboard
+modifiers (`Shift` and `Shift + Alt`).
 
 ---
 
@@ -216,13 +220,12 @@ layout: {
 
 ### Range slider and range selector
 
-If you're building dashboards with time-series data (or any chart where users need to
-zoom into a specific window), the range slider and range selector make that easy without
-writing custom zoom logic.
+For time-series dashboards, the range slider and range selector provide a small
+overview and a set of preset x-range controls.
 
-The **range slider** renders a small overview of your data below the chart. Users drag a
-selection window to control which portion of the x-axis is visible. The **range selector**
-adds preset buttons (like "1h", "7d", "All") that jump to common time windows.
+The **range slider** renders below the chart. Dragging its selection window sets
+the visible x-range. The **range selector** adds preset buttons such as "1h",
+"7d", and "All".
 
 ```ts
 layout: {
@@ -249,13 +252,12 @@ layout: {
 }
 ```
 
-When the x-axis is set to `"time"`, the range selector defaults to sensible presets
-(1h, 24h, 7d, All) even if you don't specify them. For non-time axes you just get an
-"All" button unless you provide your own presets.
+When the x-axis is `"time"`, the range selector defaults to 1h, 24h, 7d, and
+All. For non-time axes, it defaults to All unless custom presets are provided.
 
-Both controls stay in sync with the main chart — zooming or panning the chart updates the
-slider, and dragging the slider updates the chart. Use `onRangeChange` to react to
-changes, or call `setXRange(x0, x1)` to drive it programmatically.
+Both controls stay in sync with the main chart. Zooming or panning updates the
+slider; dragging the slider updates the chart. Use `onRangeChange` to observe
+changes, or call `setXRange(x0, x1)` to drive the range from application code.
 
 ---
 
