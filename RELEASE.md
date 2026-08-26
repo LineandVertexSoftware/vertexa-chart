@@ -1,6 +1,6 @@
 # Release Baseline
 
-This is the minimum local release baseline for publishing Vertexa Chart packages.
+Minimum local checks before publishing Vertexa Chart packages.
 
 ## Runtime
 
@@ -9,36 +9,52 @@ This is the minimum local release baseline for publishing Vertexa Chart packages
 - Use the repo-pinned package manager when possible: `pnpm@9.12.0`.
 
 ```bash
+nvm use 22
 node -v
 pnpm -v
 ```
 
-If Homebrew or another global install shadows pnpm, run through Corepack:
+Run the same checks on Node 24 before publishing:
+
+```bash
+nvm use 24
+node -v
+pnpm -v
+```
+
+If `pnpm -v` does not report `9.12.0`, let Corepack activate the repo-pinned
+version:
 
 ```bash
 corepack enable
 corepack prepare pnpm@9.12.0 --activate
-corepack pnpm -v
+pnpm -v
 ```
 
 ## Package Gate
 
-Run the package release check from the repo root:
+Run from the repo root:
 
 ```bash
 pnpm release:check
 ```
 
-This runs a clean install, package builds, package type checks, package tests,
-and dry-run package packing.
+The script refuses to run outside Node 22/24 unless
+`ALLOW_UNSUPPORTED_NODE=1` is set. It runs:
 
-## Demo Visual Gate
+- `pnpm clean`
+- `pnpm install --frozen-lockfile`
+- `pnpm build`
+- `pnpm typecheck`
+- `pnpm test`
+- `pnpm pack:check`
 
-Build the demo and compare the checked-in visual snapshots:
+## Full Local Gate
+
+Run the package gate plus demo build, visual snapshots, and benchmark:
 
 ```bash
-pnpm build:demo
-pnpm test:visual
+pnpm release:check:full
 ```
 
 The visual gate covers seven deterministic demo scenarios:
@@ -61,7 +77,7 @@ Review the updated PNGs before committing them.
 
 ## Performance Baseline
 
-Run the default demo benchmark set after `pnpm build:demo`:
+The full gate runs the default demo benchmark set:
 
 ```bash
 pnpm bench:demo
@@ -89,9 +105,14 @@ For a fuller local sweep, run:
 BENCH_FULL=1 pnpm bench:demo
 ```
 
+This fuller benchmark is useful before a release candidate, but it is not part
+of `pnpm release:check:full` because it takes longer and is noisier on local
+machines.
+
 ## Publish
 
-After the baseline passes and the version/changelog are committed:
+After the Node 22 and Node 24 gates pass and the version/changelog are
+committed:
 
 ```bash
 npm login

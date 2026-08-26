@@ -91,7 +91,7 @@ post-1.0 behavior changes.
 5. Raise the release bar
 - Expand visual regression coverage to bar, area, heatmap, histogram, toolbar, legend, and selection states
 - ~~Define a simple performance baseline and acceptable regression threshold~~ (documented in `RELEASE.md`)
-- Treat `build`, `typecheck`, `test`, and `pack:check` as the minimum release gate
+- ~~Treat `build`, `typecheck`, `test`, and `pack:check` as the minimum release gate~~ (`pnpm release:check`)
 
 ### P1: Good candidates if 1.0 targets dashboard/product teams
 
