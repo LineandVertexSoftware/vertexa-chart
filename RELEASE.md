@@ -49,6 +49,21 @@ The script refuses to run outside Node 22/24 unless
 - `pnpm test`
 - `pnpm pack:check`
 
+## Package Install Check
+
+Before publishing a release candidate, verify the packed artifacts in a clean
+consumer app:
+
+```bash
+pnpm pack:install-check
+```
+
+The script builds the packages, packs each workspace package to a temp
+directory, checks the packed payloads, installs those tarballs into a small Vite
+app, then runs TypeScript and production bundling against the public
+`vertexa-chart` API. Set `KEEP_PACK_INSTALL_CHECK=1` to keep the temp files for
+inspection.
+
 ## Full Local Gate
 
 Run the package gate plus demo build, visual snapshots, and benchmark:
