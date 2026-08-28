@@ -5,11 +5,16 @@ on:
     branches: [main, dev]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  build-and-test:
-    name: Build, typecheck & test
+  release-gate:
+    name: Release gate / Node ${{ matrix.node-version }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [22, 24]
 
     steps:
       - uses: actions/checkout@v4
@@ -18,17 +23,16 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Show tool versions
+        run: |
+          node -v
+          pnpm -v
 
-      - name: Build packages
-        run: pnpm build
+      - name: Run release check
+        run: pnpm release:check
 
-      - name: Typecheck
-        run: pnpm typecheck
-
-      - name: Test
-        run: pnpm test
+      - name: Verify packed install flow
+        run: pnpm pack:install-check

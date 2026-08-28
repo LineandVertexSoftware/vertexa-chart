@@ -49,6 +49,9 @@ The script refuses to run outside Node 22/24 unless
 - `pnpm test`
 - `pnpm pack:check`
 
+The CI workflow runs this gate on Node 22 and Node 24 for pushes to `main` and
+`dev`, pull requests to `main`, and manual workflow dispatches.
+
 ## Package Install Check
 
 Before publishing a release candidate, verify the packed artifacts in a clean
@@ -63,6 +66,8 @@ directory, checks the packed payloads, installs those tarballs into a small Vite
 app, then runs TypeScript and production bundling against the public
 `vertexa-chart` API. Set `KEEP_PACK_INSTALL_CHECK=1` to keep the temp files for
 inspection.
+
+CI also runs this check on Node 22 and Node 24.
 
 ## Full Local Gate
 

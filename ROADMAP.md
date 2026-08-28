@@ -139,7 +139,8 @@ Target: `1.0.0`
 
 Target: `1.0.0-rc`
 
-- Run full release check in CI and locally
+- ~~Run Node 22/24 package release gate in CI~~ (`.github/workflows/ci.yml`)
+- Run full local gate before publishing
 - ~~Verify package contents and install flow~~ (`pnpm pack:install-check`)
 - Add one demo example per major supported trace family / workflow
 - ~~Freeze semver expectations for the public runtime API~~ (`PUBLIC_CONTRACT.md`)
