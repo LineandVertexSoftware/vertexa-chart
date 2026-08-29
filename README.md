@@ -413,6 +413,8 @@ Open the URL printed by Vite. Append `?example=<name>` to switch between example
 | Bar basics | `bar-basics` |
 | Bar + time axis | `bar-time` |
 | Bar streaming | `bar-interactions` |
+| Area basics | `area-basics` |
+| Histogram basics | `histogram-basics` |
 | Heatmap | `heatmap-basics` |
 | Advanced workbench | `vertexa-workbench` |
 | 6 synchronized charts × 1M points | `perf-sync-6` |
@@ -432,6 +434,16 @@ pnpm bench:demo
 
 The harness serves `apps/demo/dist`, opens headless Chrome, runs named benchmark
 scenarios, and writes JSON artifacts to `apps/demo/test/perf-artifacts/`.
+
+To run the same benchmark set and fail on release-threshold regressions:
+
+```bash
+pnpm bench:demo:check
+```
+
+Thresholds live in `apps/demo/test/perf-thresholds.json`. Set
+`BENCH_THRESHOLD_MODE=warn` to report threshold misses without failing the
+command.
 
 For end-user-visible numbers, run the same harness in a normal foreground Chrome
 window instead of headless mode:

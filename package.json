@@ -11,6 +11,7 @@
     "build": "pnpm -r --filter './packages/**' --sort build",
     "build:demo": "pnpm -C apps/demo build",
     "bench:demo": "pnpm build:demo && pnpm -C apps/demo bench",
+    "bench:demo:check": "pnpm bench:demo && pnpm -C apps/demo bench:check",
     "bench:demo:visible": "pnpm build:demo && pnpm -C apps/demo bench:visible",
     "clean": "pnpm -r clean",
     "clean:all": "pnpm clean && rm -rf node_modules apps/demo/node_modules packages/*/node_modules .pnpm-store",

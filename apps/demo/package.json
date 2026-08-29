@@ -8,6 +8,7 @@
     "preview": "vite preview",
     "test:visual": "node test/visual-regression.mjs",
     "bench": "node test/performance-harness.mjs",
+    "bench:check": "node test/performance-thresholds.mjs",
     "bench:visible": "node test/performance-harness.mjs --headed",
     "typecheck": "tsc --noEmit"
   },

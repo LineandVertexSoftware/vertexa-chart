@@ -30,7 +30,7 @@ and repeatable before tagging `1.0.0`.
 | Streaming/data mutation | Partial | `appendPoints()` works for x/y traces plus hover `text` and `customdata`; fast GPU append path is limited to unsmoothed scatter traces when domains do not change. |
 | Export and UI | Ready | PNG, SVG, CSV export; optional built-in toolbar with export and fullscreen controls. |
 | Accessibility | Partial | Keyboard navigation, ARIA labels, live tooltip region, high-contrast mode are present; richer screen-reader behavior is not. |
-| Testing | Partial | Good unit coverage, plus visual regression across 7 deterministic demo scenarios. |
+| Testing | Partial | Good unit coverage, plus visual regression across 9 deterministic demo scenarios. |
 | Multi-chart workflows | Partial | Demo proves linked charts can be built from callbacks, but there is no built-in sync helper API. |
 
 ## Important gaps and risks
@@ -60,10 +60,10 @@ post-1.0 behavior changes.
 
 ### 3. The quality gate is still too thin for a stable major
 
-- ~~Visual regression currently covers only `getting-started`, `axis-grid`, and `events-api`~~ (expanded to 7 deterministic scenarios)
+- ~~Visual regression currently covers only `getting-started`, `axis-grid`, and `events-api`~~ (expanded to 9 deterministic scenarios)
 - Broad visual coverage now includes dedicated scatter, bar, area, heatmap, and histogram routes plus toolbar, legend, and selected-state UI
 - Mobile/touch expectations are documented and the D3 touch zoom surface is smoke-tested; deeper device QA is still pending
-- Performance claims are plausible, and `RELEASE.md` now defines a local baseline; automated threshold enforcement is still pending
+- Performance claims are plausible, and the demo benchmark now has automated threshold checks
 
 ## Required before 1.0
 
@@ -90,7 +90,7 @@ post-1.0 behavior changes.
 
 5. Raise the release bar
 - Expand visual regression coverage to bar, area, heatmap, histogram, toolbar, legend, and selection states
-- ~~Define a simple performance baseline and acceptable regression threshold~~ (documented in `RELEASE.md`)
+- ~~Define and automate a simple performance baseline and acceptable threshold~~ (`pnpm bench:demo:check`)
 - ~~Treat `build`, `typecheck`, `test`, and `pack:check` as the minimum release gate~~ (`pnpm release:check`)
 
 ### P1: Good candidates if 1.0 targets dashboard/product teams

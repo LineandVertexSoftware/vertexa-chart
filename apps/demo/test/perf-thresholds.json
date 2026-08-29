@@ -1,0 +1,79 @@
+{
+  "version": 1,
+  "description": "Default local performance limits for the demo benchmark harness. These are coarse release guardrails, not microbenchmarks.",
+  "scenarios": {
+    "mount-scatter-200k-quality": [
+      {
+        "path": "metrics.mountMs",
+        "max": 75,
+        "unit": "ms",
+        "description": "200k scatter mount time"
+      },
+      {
+        "path": "metrics.firstFrameWaitMs",
+        "max": 65,
+        "unit": "ms",
+        "description": "200k scatter first-frame wait"
+      },
+      {
+        "path": "metrics.sampledPoints",
+        "min": 200000,
+        "unit": "points",
+        "description": "quality mode should render every point at rest"
+      },
+      {
+        "path": "metrics.lodRatio",
+        "min": 1,
+        "description": "quality mode should keep full point density"
+      }
+    ],
+    "pan-scatter-200k-balanced": [
+      {
+        "path": "metrics.observedFps",
+        "min": 55,
+        "unit": "fps",
+        "description": "steady-state pan frame rate"
+      },
+      {
+        "path": "metrics.operationLatencyMs.p95",
+        "max": 18,
+        "unit": "ms",
+        "description": "pan operation p95 latency"
+      },
+      {
+        "path": "metrics.frameBudgetMs.over16_7Ratio",
+        "max": 0.05,
+        "description": "share of pan frames over 16.7ms"
+      },
+      {
+        "path": "metrics.sampledPoints.lodRatio",
+        "min": 0.2,
+        "description": "balanced pan should retain a useful sampled point density"
+      }
+    ],
+    "append-scatter-50k-window": [
+      {
+        "path": "metrics.throughputPointsPerSecond",
+        "min": 45000,
+        "unit": "points/s",
+        "description": "append throughput"
+      },
+      {
+        "path": "metrics.operationLatencyMs.p95",
+        "max": 18,
+        "unit": "ms",
+        "description": "append operation p95 latency"
+      },
+      {
+        "path": "metrics.frameBudgetMs.over16_7Ratio",
+        "max": 0.05,
+        "description": "share of append frames over 16.7ms"
+      },
+      {
+        "path": "metrics.sampledPoints.lodRatio",
+        "min": 1,
+        "description": "50k append window should remain full resolution"
+      }
+    ]
+  }
+}

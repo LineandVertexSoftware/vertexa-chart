@@ -99,10 +99,11 @@ Review the updated PNGs before committing them.
 
 ## Performance Baseline
 
-The full gate runs the default demo benchmark set:
+The full gate runs the default demo benchmark set and checks the results against
+committed thresholds:
 
 ```bash
-pnpm bench:demo
+pnpm bench:demo:check
 ```
 
 The default benchmark scenarios are:
@@ -117,9 +118,16 @@ Results are written to:
 apps/demo/test/perf-artifacts/benchmark-results.json
 ```
 
-Compare against the previous release or a known-good main-branch run. Treat a
-regression above roughly 10% in mount time, pan latency, append throughput, or
-observed FPS as a release blocker unless the changelog explains the tradeoff.
+Thresholds live in:
+
+```text
+apps/demo/test/perf-thresholds.json
+```
+
+Treat threshold failures in mount time, pan latency, append throughput,
+long-frame ratio, sampled-point density, or observed FPS as release blockers
+unless the changelog explains the tradeoff. Set `BENCH_THRESHOLD_MODE=warn` only
+when collecting comparison data that should not fail the run.
 
 For a fuller local sweep, run:
 

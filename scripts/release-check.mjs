@@ -16,7 +16,7 @@ Default:
   clean, install --frozen-lockfile, build, typecheck, test, pack:check
 
 With --full:
-  also run demo build, visual snapshots, and demo benchmark
+  also run demo build, visual snapshots, demo benchmark, and performance thresholds
 
 Set ALLOW_UNSUPPORTED_NODE=1 to bypass the Node 22/24 release-check guard.`);
   process.exit(0);
@@ -74,7 +74,8 @@ run("pnpm", ["pack:check"]);
 if (full) {
   run("pnpm", ["build:demo"]);
   run("pnpm", ["test:visual"]);
-  run("pnpm", ["bench:demo"]);
+  run("pnpm", ["-C", "apps/demo", "bench"]);
+  run("pnpm", ["-C", "apps/demo", "bench:check"]);
 }
 
 console.log(`\nRelease check passed${full ? " with demo gates" : ""}.`);
