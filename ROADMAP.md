@@ -61,7 +61,7 @@ post-1.0 behavior changes.
 ### 3. The quality gate is still too thin for a stable major
 
 - ~~Visual regression currently covers only `getting-started`, `axis-grid`, and `events-api`~~ (expanded to 7 deterministic scenarios)
-- Broad visual coverage now includes grouped bars, time bars, heatmap, area fills, histogram, toolbar controls, legend states, and selected-state UI
+- Broad visual coverage now includes dedicated scatter, bar, area, heatmap, and histogram routes plus toolbar, legend, and selected-state UI
 - Mobile/touch expectations are documented and the D3 touch zoom surface is smoke-tested; deeper device QA is still pending
 - Performance claims are plausible, and `RELEASE.md` now defines a local baseline; automated threshold enforcement is still pending
 
@@ -142,7 +142,7 @@ Target: `1.0.0-rc`
 - ~~Run Node 22/24 package release gate in CI~~ (`.github/workflows/ci.yml`)
 - Run full local gate before publishing
 - ~~Verify package contents and install flow~~ (`pnpm pack:install-check`)
-- Add one demo example per major supported trace family / workflow
+- ~~Add one demo example per major supported trace family / workflow~~ (scatter, bar, area, heatmap, histogram, runtime events, and multi-chart workflows)
 - ~~Freeze semver expectations for the public runtime API~~ (`PUBLIC_CONTRACT.md`)
 
 ### Phase 4: Post-1.0 expansion

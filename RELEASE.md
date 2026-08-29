@@ -77,13 +77,15 @@ Run the package gate plus demo build, visual snapshots, and benchmark:
 pnpm release:check:full
 ```
 
-The visual gate covers seven deterministic demo scenarios:
+The visual gate covers nine deterministic demo scenarios:
 
 - `getting-started`
 - `axis-grid`
 - `events-api`
 - `bar-basics`
 - `bar-time`
+- `area-basics`
+- `histogram-basics`
 - `heatmap-basics`
 - `visual-matrix`
 

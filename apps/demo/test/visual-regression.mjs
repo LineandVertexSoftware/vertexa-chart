@@ -25,6 +25,8 @@ const scenarios = [
   { id: "events-api", name: "events-api" },
   { id: "bar-basics", name: "bar-basics" },
   { id: "bar-time", name: "bar-time" },
+  { id: "area-basics", name: "area-basics" },
+  { id: "histogram-basics", name: "histogram-basics" },
   { id: "heatmap-basics", name: "heatmap-basics" },
   { id: "visual-matrix", name: "visual-matrix" }
 ];

@@ -1,4 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
-  "include": ["src"]
+  "compilerOptions": {
+    "types": ["@webgpu/types"]
+  },
+  "include": ["src", "../../packages/renderer-webgpu/src/types/wgsl.d.ts"]
 }

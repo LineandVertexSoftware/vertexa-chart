@@ -4,12 +4,14 @@ import {
   type ChartOptions,
   type ChartPerformanceMode,
   type HoverMode,
+  type Layout,
   type Trace
 } from "@lineandvertexsoftware/vertexa-chart";
 import { runPerformanceHarness } from "./performance-harness.js";
 
-const root = document.querySelector<HTMLDivElement>("#root");
-if (!root) throw new Error("Missing #root container.");
+const rootEl = document.querySelector<HTMLDivElement>("#root");
+if (!rootEl) throw new Error("Missing #root container.");
+const root: HTMLDivElement = rootEl;
 const params = new URLSearchParams(window.location.search);
 
 const requestedSeed = Number(params.get("seed") ?? Number.NaN);
@@ -29,7 +31,9 @@ type ExampleId =
   | "perf-sync-6"
   | "bar-basics"
   | "bar-time"
+  | "area-basics"
   | "bar-interactions"
+  | "histogram-basics"
   | "heatmap-basics"
   | "visual-matrix";
 
@@ -119,6 +123,15 @@ const EXAMPLES: ExampleDefinition[] = [
     apis: ["hovermode: \"x\"", "type: \"bar\"", "type: \"scatter\""]
   },
   {
+    id: "area-basics",
+    title: "Area Basics",
+    summary: "Area fills with custom baselines, line styling, and range controls.",
+    category: "Trace Types",
+    focus: "A dedicated area trace route for fill opacity, base values, hover, and zoomable ranges.",
+    tags: ["Area", "Range selector", "Baseline"],
+    apis: ["type: \"area\"", "area.base", "rangeSelector"]
+  },
+  {
     id: "bar-interactions",
     title: "Bar Interactions",
     summary: "Stream bar data in real time with appendPoints().",
@@ -126,6 +139,15 @@ const EXAMPLES: ExampleDefinition[] = [
     focus: "Sliding-window updates for a live bar chart paired with a derived EMA line.",
     tags: ["Streaming", "appendPoints()", "Sliding window"],
     apis: ["appendPoints()", "setTraces()", "tooltip"]
+  },
+  {
+    id: "histogram-basics",
+    title: "Histogram Basics",
+    summary: "Binning, normalization, and distribution comparison.",
+    category: "Trace Types",
+    focus: "A standalone histogram example for bin controls, probability normalization, and distribution hover.",
+    tags: ["Histogram", "Binning", "Distribution"],
+    apis: ["type: \"histogram\"", "nbinsx", "histnorm"]
   },
   {
     id: "heatmap-basics",
@@ -1211,7 +1233,7 @@ function runVertexaWorkbench() {
   let selectedCount = 0;
   let lastPointer = { x: Number.NaN, y: Number.NaN };
 
-  const layoutBase = {
+  const layoutBase: Layout = {
     title: "GPU telemetry sweep",
     legend: { show: false },
     margin: { top: 26, right: 24, bottom: 44, left: 58 },
@@ -1931,7 +1953,7 @@ function runPerfSync6() {
   const charts: Chart[] = [];
   let syncingZoom = false;
 
-  const buildLayout = (title: string, selected: SelectionWindow | null): ChartOptions["layout"] => {
+  const buildLayout = (title: string, selected: SelectionWindow | null): Layout => {
     const x0 = selected ? Math.min(selected.x0, selected.x1) : 0;
     const x1 = selected ? Math.max(selected.x0, selected.x1) : 0;
     const y0 = selected ? Math.min(selected.y0, selected.y1) : 0;
@@ -2593,9 +2615,360 @@ function runBarInteractions() {
   };
 }
 
+function runAreaBasics() {
+  const { host, panel } = mountShell("area-basics", {
+    title: "Example 7: Area Trace Basics",
+    summary: "Render filled area traces with custom baselines, styled boundaries, and range controls.",
+    panelTitle: "Live Runtime Controls",
+    panelHtml: `
+      <p>Swap the comparison window and toggle the area baseline to check fill behavior.</p>
+      <div class="btn-row">
+        <button id="btn-area-randomize">setTraces()</button>
+        <button id="btn-area-baseline">toggle area.base</button>
+        <button id="btn-area-range">setXRange()</button>
+        <button id="btn-area-fit">fitToData()</button>
+      </div>
+      <pre id="area-log" class="event-log"></pre>
+    `
+  });
+
+  const randomizeBtn = panel.querySelector<HTMLButtonElement>("#btn-area-randomize");
+  const baselineBtn = panel.querySelector<HTMLButtonElement>("#btn-area-baseline");
+  const rangeBtn = panel.querySelector<HTMLButtonElement>("#btn-area-range");
+  const fitBtn = panel.querySelector<HTMLButtonElement>("#btn-area-fit");
+  const logEl = panel.querySelector<HTMLPreElement>("#area-log");
+  if (!randomizeBtn || !baselineBtn || !rangeBtn || !fitBtn || !logEl) {
+    throw new Error("Area basics controls missing.");
+  }
+
+  const pushLog = (line: string) => {
+    const rows = (logEl.textContent ?? "").split("\n").filter(Boolean);
+    rows.unshift(line);
+    logEl.textContent = rows.slice(0, 10).join("\n");
+  };
+
+  const count = 144;
+  const start = baseNowMs - (count - 1) * 30 * 60_000;
+  const xs = Array.from({ length: count }, (_, i) => new Date(start + i * 30 * 60_000));
+  let phase = 0.1;
+  let raisedBaseline = false;
+  let zoomedRange = false;
+
+  const makeSeries = (offset: number, amplitude: number, center: number) =>
+    new Float32Array(
+      xs.map((_x, i) => {
+        const t = i / Math.max(1, xs.length - 1);
+        return (
+          center +
+          Math.sin(t * Math.PI * 5.4 + phase + offset) * amplitude +
+          Math.cos(t * Math.PI * 2.2 + offset) * (amplitude * 0.35) +
+          (rand() - 0.5) * 2.4
+        );
+      })
+    );
+
+  let primary = makeSeries(0, 13, 54);
+  let secondary = makeSeries(0.85, 8, 44);
+
+  const buildTraces = (): Trace[] => [
+    {
+      type: "area",
+      name: "Capacity",
+      x: xs,
+      y: primary,
+      mode: "lines+markers",
+      area: { base: raisedBaseline ? 32 : 20, color: "#0f766e", opacity: 0.3 },
+      line: { color: "#0f766e", opacity: 0.9, widthPx: 2 },
+      marker: { color: "#0f766e", opacity: 0.24, sizePx: 2 },
+      hovertemplate: "%{trace.name}<br>%{x}<br>%{y}"
+    },
+    {
+      type: "area",
+      name: "Reserved",
+      x: xs,
+      y: secondary,
+      mode: "lines",
+      area: { base: raisedBaseline ? 32 : 20, color: "#0284c7", opacity: 0.2 },
+      line: { color: "#0369a1", opacity: 0.84, widthPx: 1.6, dash: "dash" },
+      hovertemplate: "%{trace.name}<br>%{x}<br>%{y}"
+    }
+  ];
+
+  const chart = createDemoChart(host, {
+    width: 920,
+    height: 520,
+    layout: {
+      title: "Capacity envelope",
+      hovermode: "x",
+      xaxis: {
+        type: "time",
+        title: "Window",
+        tickValues: [xs[0], xs[36], xs[72], xs[108], xs[count - 1]],
+        timeFormat: "%b %d %H:%M"
+      },
+      yaxis: { type: "linear", title: "Utilization", min: 18, max: 78, precision: 1 },
+      rangeSlider: { show: true, heightPx: 58 },
+      rangeSelector: {
+        show: true,
+        presets: [
+          { label: "12h", durationMs: 12 * 60 * 60_000 },
+          { label: "24h", durationMs: 24 * 60 * 60_000 },
+          { label: "All", durationMs: null }
+        ]
+      },
+      annotations: [
+        {
+          type: "region",
+          x0: xs[42],
+          y0: 28,
+          x1: xs[78],
+          y1: 74,
+          fill: "#ccfbf1",
+          fillOpacity: 0.2,
+          stroke: "#0f766e",
+          strokeOpacity: 0.32
+        },
+        {
+          type: "line",
+          x0: xs[98],
+          y0: 18,
+          x1: xs[98],
+          y1: 78,
+          color: "#075985",
+          opacity: 0.36,
+          dash: "dot"
+        },
+        {
+          type: "label",
+          x: xs[79],
+          y: 73,
+          text: "review window",
+          color: "#115e59",
+          background: "#ecfeff",
+          backgroundOpacity: 0.92,
+          anchor: "start"
+        }
+      ],
+      grid: {
+        show: true,
+        color: "#ccfbf1",
+        axisColor: "#0f766e",
+        textColor: "#134e4a",
+        opacity: 0.68,
+        strokeWidth: 1
+      }
+    },
+    traces: buildTraces(),
+    tooltip: {
+      formatter: (ctx) => `${ctx.trace.name ?? "area"} ${ctx.x}: ${Number(ctx.y).toFixed(2)}`
+    }
+  });
+
+  randomizeBtn.addEventListener("click", () => {
+    phase += 0.45 + rand() * 0.25;
+    primary = makeSeries(0, 13, 54);
+    secondary = makeSeries(0.85, 8, 44);
+    chart.setTraces(buildTraces());
+    pushLog("setTraces() regenerated area envelopes");
+  });
+
+  baselineBtn.addEventListener("click", () => {
+    raisedBaseline = !raisedBaseline;
+    chart.setTraces(buildTraces());
+    pushLog(`area.base=${raisedBaseline ? 32 : 20}`);
+  });
+
+  rangeBtn.addEventListener("click", () => {
+    zoomedRange = !zoomedRange;
+    if (zoomedRange) {
+      chart.setXRange(xs[54], xs[102]);
+      pushLog("setXRange() applied to middle window");
+      return;
+    }
+    chart.setXRange(xs[0], xs[count - 1]);
+    pushLog("setXRange() restored full window");
+  });
+
+  fitBtn.addEventListener("click", () => {
+    chart.fitToData();
+    zoomedRange = false;
+    pushLog("fitToData() restored data extents");
+  });
+
+  pushLog("Ready. Area fills use custom bases and x-hover inspection.");
+  return () => chart.destroy();
+}
+
+function runHistogramBasics() {
+  const { host, panel } = mountShell("histogram-basics", {
+    title: "Example 8: Histogram Basics",
+    summary: "Compare distributions with manual bins, probability mode, and runtime updates.",
+    panelTitle: "Live Runtime Controls",
+    panelHtml: `
+      <p>Change the bin count, toggle normalization, or regenerate the sampled distribution.</p>
+      <div class="btn-row">
+        <button id="btn-hist-randomize">setTraces()</button>
+        <button id="btn-hist-bins">toggle bins</button>
+        <button id="btn-hist-norm">toggle histnorm</button>
+        <button id="btn-hist-horizontal">toggle orientation</button>
+      </div>
+      <pre id="hist-log" class="event-log"></pre>
+    `
+  });
+
+  const randomizeBtn = panel.querySelector<HTMLButtonElement>("#btn-hist-randomize");
+  const binsBtn = panel.querySelector<HTMLButtonElement>("#btn-hist-bins");
+  const normBtn = panel.querySelector<HTMLButtonElement>("#btn-hist-norm");
+  const horizontalBtn = panel.querySelector<HTMLButtonElement>("#btn-hist-horizontal");
+  const logEl = panel.querySelector<HTMLPreElement>("#hist-log");
+  if (!randomizeBtn || !binsBtn || !normBtn || !horizontalBtn || !logEl) {
+    throw new Error("Histogram basics controls missing.");
+  }
+
+  const pushLog = (line: string) => {
+    const rows = (logEl.textContent ?? "").split("\n").filter(Boolean);
+    rows.unshift(line);
+    logEl.textContent = rows.slice(0, 10).join("\n");
+  };
+
+  let phase = 0.4;
+  let fineBins = false;
+  let probabilityMode = false;
+  let horizontal = false;
+
+  const makeDistribution = (offset: number) =>
+    Array.from({ length: 420 }, (_unused, i) => {
+      const cluster = i % 4;
+      const center = 34 + cluster * 9 + Math.sin((i + offset) * 0.023 + phase) * 5;
+      return center + Math.cos(i * 0.31 + offset) * 3.2 + (rand() - 0.5) * 6.5;
+    });
+
+  let baseline = makeDistribution(0);
+  let candidate = makeDistribution(7);
+
+  const buildHistogramTrace = (
+    name: string,
+    values: number[],
+    color: string,
+    opacity: number
+  ): Trace => {
+    const common = {
+      type: "histogram" as const,
+      name,
+      orientation: horizontal ? "h" as const : "v" as const,
+      nbinsx: horizontal ? undefined : fineBins ? 24 : 14,
+      nbinsy: horizontal ? fineBins ? 24 : 14 : undefined,
+      histnorm: probabilityMode ? "probability" as const : "" as const,
+      bar: { color, opacity },
+      marker: { color, opacity },
+      hovertemplate: "%{trace.name}<br>bin=%{x}<br>value=%{y}"
+    };
+    return horizontal ? { ...common, y: values } : { ...common, x: values };
+  };
+
+  const buildTraces = (): Trace[] => [
+    buildHistogramTrace("Baseline", baseline, "#2563eb", 0.5),
+    buildHistogramTrace("Candidate", candidate, "#f97316", 0.48)
+  ];
+
+  const buildLayout = (): Layout => ({
+    title: horizontal ? "Latency distribution (horizontal)" : "Latency distribution",
+    hovermode: "closest",
+    legend: { show: true, position: "top-right" },
+    xaxis: horizontal
+      ? { type: "linear", title: probabilityMode ? "Probability" : "Count", precision: 2 }
+      : { type: "linear", title: "Latency (ms)", tickFormat: ".0f", min: 24, max: 72 },
+    yaxis: horizontal
+      ? { type: "linear", title: "Latency (ms)", tickFormat: ".0f", min: 24, max: 72 }
+      : { type: "linear", title: probabilityMode ? "Probability" : "Count", precision: 2 },
+    annotations: [
+      horizontal
+        ? {
+            type: "line" as const,
+            x0: probabilityMode ? 0.08 : 28,
+            y0: 50,
+            x1: probabilityMode ? 0.2 : 95,
+            y1: 50,
+            color: "#7c2d12",
+            opacity: 0.38,
+            dash: "dash" as const
+          }
+        : {
+            type: "line" as const,
+            x0: 50,
+            y0: 0,
+            x1: 50,
+            y1: probabilityMode ? 0.2 : 95,
+            color: "#7c2d12",
+            opacity: 0.38,
+            dash: "dash" as const
+          },
+      {
+        type: "label" as const,
+        x: horizontal ? (probabilityMode ? 0.2 : 95) : 50,
+        y: horizontal ? 51.5 : probabilityMode ? 0.2 : 92,
+        text: "target",
+        color: "#7c2d12",
+        background: "#fff7ed",
+        backgroundOpacity: 0.92,
+        anchor: horizontal ? "end" as const : "middle" as const
+      }
+    ],
+    grid: {
+      show: true,
+      color: "#fed7aa",
+      axisColor: "#c2410c",
+      textColor: "#7c2d12",
+      opacity: 0.62,
+      strokeWidth: 1
+    }
+  });
+
+  const chart = createDemoChart(host, {
+    width: 920,
+    height: 520,
+    layout: buildLayout(),
+    traces: buildTraces(),
+    tooltip: {
+      formatter: (ctx) => `${ctx.trace.name ?? "histogram"} bin=${ctx.x} value=${ctx.y}`
+    }
+  });
+
+  randomizeBtn.addEventListener("click", () => {
+    phase += 0.36 + rand() * 0.2;
+    baseline = makeDistribution(0);
+    candidate = makeDistribution(7);
+    chart.setTraces(buildTraces());
+    pushLog("setTraces() regenerated distributions");
+  });
+
+  binsBtn.addEventListener("click", () => {
+    fineBins = !fineBins;
+    chart.setTraces(buildTraces());
+    pushLog(`bins=${fineBins ? 24 : 14}`);
+  });
+
+  normBtn.addEventListener("click", () => {
+    probabilityMode = !probabilityMode;
+    chart.setLayout(buildLayout());
+    chart.setTraces(buildTraces());
+    pushLog(`histnorm=${probabilityMode ? "probability" : "raw counts"}`);
+  });
+
+  horizontalBtn.addEventListener("click", () => {
+    horizontal = !horizontal;
+    chart.setLayout(buildLayout());
+    chart.setTraces(buildTraces());
+    pushLog(`orientation=${horizontal ? "h" : "v"}`);
+  });
+
+  pushLog("Ready. Toggle bins, normalization, and orientation.");
+  return () => chart.destroy();
+}
+
 function runHeatmapBasics() {
   const { host, panel } = mountShell("heatmap-basics", {
-    title: "Example 7: Heatmap Basics",
+    title: "Example 9: Heatmap Basics",
     summary: "Render a heatmap trace, control z-range, and swap colorscales.",
     panelTitle: "Live Runtime Controls",
     panelHtml: `
@@ -2985,7 +3358,9 @@ const activeExample: ExampleId =
   requestedExample === "perf-sync-6" ||
   requestedExample === "bar-basics" ||
   requestedExample === "bar-time" ||
+  requestedExample === "area-basics" ||
   requestedExample === "bar-interactions" ||
+  requestedExample === "histogram-basics" ||
   requestedExample === "heatmap-basics" ||
   requestedExample === "visual-matrix" ||
   requestedExample === "getting-started"
@@ -3013,13 +3388,17 @@ const cleanup =
           ? runBarBasics()
           : activeExample === "bar-time"
             ? runBarTime()
-            : activeExample === "bar-interactions"
-              ? runBarInteractions()
-              : activeExample === "heatmap-basics"
-                ? runHeatmapBasics()
-                : activeExample === "visual-matrix"
-                  ? runVisualMatrix()
-                  : runGettingStarted();
+            : activeExample === "area-basics"
+              ? runAreaBasics()
+              : activeExample === "bar-interactions"
+                ? runBarInteractions()
+                : activeExample === "histogram-basics"
+                  ? runHistogramBasics()
+                  : activeExample === "heatmap-basics"
+                    ? runHeatmapBasics()
+                    : activeExample === "visual-matrix"
+                      ? runVisualMatrix()
+                      : runGettingStarted();
 
 window.addEventListener("beforeunload", () => {
   cleanup();

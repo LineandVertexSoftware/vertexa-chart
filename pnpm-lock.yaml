@@ -21,6 +21,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vertexa-chart
     devDependencies:
+      '@webgpu/types':
+        specifier: ^0.1.68
+        version: 0.1.68
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
