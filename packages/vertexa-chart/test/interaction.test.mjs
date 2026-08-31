@@ -23,10 +23,31 @@ function elementStub() {
 
 function tooltipElementStub() {
   const attrs = new Map();
+  let text = "";
+  let html = "";
+  const escapeHtml = (value) =>
+    String(value)
+      .replaceAll("&", "&amp;")
+      .replaceAll("<", "&lt;")
+      .replaceAll(">", "&gt;");
   const el = {
     style: {},
-    textContent: "",
-    innerHTML: "",
+    get textContent() {
+      return text;
+    },
+    set textContent(value) {
+      text = String(value);
+      html = escapeHtml(value);
+      el.children = [];
+    },
+    get innerHTML() {
+      return html;
+    },
+    set innerHTML(value) {
+      html = String(value);
+      text = String(value);
+      el.children = [];
+    },
     children: [],
     setAttribute: spy((key, value) => {
       attrs.set(String(key), String(value));
@@ -37,8 +58,8 @@ function tooltipElementStub() {
     getAttribute: (key) => attrs.get(String(key)),
     replaceChildren: (...nodes) => {
       el.children = nodes;
-      el.textContent = "";
-      el.innerHTML = "";
+      text = "";
+      html = "";
     }
   };
   return el;
@@ -1044,7 +1065,7 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
     assert.equal(tooltip.style.transform, "translate(62px, 72px)");
   });
 
-  await t.test("tooltip renderer strings are treated as trusted HTML and null hides tooltip", () => {
+  await t.test("tooltip renderer strings are treated as text and null hides tooltip", () => {
     const tooltip = tooltipElementStub();
 
     const hoverManager = new HoverManager(
@@ -1066,7 +1087,8 @@ test("interaction suite (zoom/pan, hover, legend toggle, resize)", async (t) => 
       screenY: 20,
       defaultLabel: "rendered"
     });
-    assert.equal(tooltip.innerHTML, "<strong>rendered</strong><br>2");
+    assert.equal(tooltip.textContent, "<strong>rendered</strong><br>2");
+    assert.equal(tooltip.innerHTML, "&lt;strong&gt;rendered&lt;/strong&gt;&lt;br&gt;2");
     assert.equal(tooltip.style.transform, "translate(22px, 32px)");
 
     hoverManager.showTooltip({

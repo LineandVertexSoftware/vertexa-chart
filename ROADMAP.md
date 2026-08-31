@@ -50,7 +50,7 @@ ones are part of the supported dashboard baseline and which ones move to 1.1.
 ### 2. A few correctness and contract issues still need tightening
 
 - ~~`setLayout()` currently replaces the layout object; the top-level README describes it as a merge-style API~~ (fixed and covered by tests)
-- ~~`tooltip.renderer` string output is written through `innerHTML`, so the safety contract is currently “trusted HTML only,” but that is not clearly documented or tested~~ (documented and covered by tests)
+- ~~`tooltip.renderer` needed a final pre-1.0 safety contract~~ (strings render as text; return a `Node` for markup)
 - ~~Scatter traces with `mode: "lines"` appear to be non-pickable/non-selectable~~ (fixed for CPU picking and covered by tests)
 - ~~Broader hover/click/select regression coverage is still needed across all implemented trace families~~ (covered by tests)
 - ~~CPU/GPU picking fallback behavior still needs a clearer tested contract~~ (documented and covered by tests)
@@ -85,7 +85,7 @@ post-1.0 behavior changes.
 - ~~Persistent interaction state across `setTraces()` / `setLayout()` updates~~ (shipped)
 
 4. Harden tooltip and export behavior
-- ~~Either sanitize custom tooltip HTML or document `tooltip.renderer` as trusted HTML only~~ (documented as trusted HTML)
+- ~~Finalize the tooltip renderer safety contract~~ (renderer strings render as text; return a `Node` for markup)
 - ~~Add dedicated regression tests for PNG, SVG, and CSV export on mixed-layer charts~~ (covered, including export option flags and toolbar downloads)
 
 5. Raise the release bar
@@ -124,7 +124,7 @@ Target: immediate next milestone
 - Audit docs against implementation and remove contradictions
 - ~~Fix line-only picking/select behavior or formally mark it unsupported~~ (fixed for CPU picking)
 - ~~Add tests for tooltip security contract and export behavior~~ (covered)
-- ~~Expand visual coverage beyond the current 3 snapshot scenarios~~ (expanded to 7 deterministic scenarios)
+- ~~Expand visual coverage beyond the current 3 snapshot scenarios~~ (expanded to 9 deterministic scenarios)
 
 ### Phase 2: 1.0 blockers
 

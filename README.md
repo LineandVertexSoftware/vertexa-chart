@@ -345,12 +345,12 @@ tooltip: {
   formatter: (ctx) => `${ctx.trace.name} — x: ${ctx.x}, y: ${ctx.y}`
 }
 
-// Trusted HTML renderer
+// Custom text renderer
 tooltip: {
   renderer: (ctx) => `<strong>${ctx.trace.name}</strong><br>${ctx.y}`
 }
 
-// DOM renderer (avoids innerHTML)
+// DOM renderer for custom markup
 tooltip: {
   renderer: (ctx) => {
     const div = document.createElement("div");
@@ -362,8 +362,8 @@ tooltip: {
 }
 ```
 
-If `tooltip.renderer` returns a `string`, Vertexa Chart inserts it with `innerHTML`.
-Only return trusted HTML strings. Use `formatter` for plain text.
+If `tooltip.renderer` returns a `string`, Vertexa Chart treats it as text.
+Return a `Node` when custom markup is needed.
 
 ---
 

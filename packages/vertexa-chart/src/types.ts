@@ -528,12 +528,11 @@ export type ChartTooltipOptions = {
 
   /**
    * Return custom tooltip content.
-   * - `string`: treated as trusted HTML and inserted with `innerHTML`
+   * - `string`: treated as plain text
    * - `Node`: mounted directly in the tooltip container
    * - `null`: hide tooltip
    *
-   * Use `formatter` for plain text, or return a `Node` if you want to avoid
-   * HTML string injection.
+   * Return a `Node` for custom markup.
    */
   renderer?: (context: ChartTooltipContext) => string | Node | null;
 };

@@ -131,8 +131,8 @@ outside the `1.0` contract.
 
 - `tooltip.formatter` returns plain text.
 - `tooltip.renderer` may return a `Node`, `string`, or `null`.
-- Renderer strings are trusted HTML and inserted into the tooltip container as
-  HTML. Use `formatter` or return a `Node` when untrusted input is involved.
+- Renderer strings are inserted as text. Return a `Node` when custom markup is
+  needed.
 
 Trace `hovertemplate` strings support escaped token substitution for `%{x}`,
 `%{y}`, `%{pointIndex}`, `%{trace.name}`, `%{text}`, `%{customdata}`,

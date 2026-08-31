@@ -22,6 +22,17 @@ const seededRandom = makeSeededRandom(Number.isFinite(requestedSeed) ? requested
 const rand = () => (snapshotMode ? seededRandom() : Math.random());
 const baseNowMs = snapshotMode ? Date.UTC(2026, 0, 1, 12, 0, 0) : Date.now();
 
+function makeTooltipNode(titleText: unknown, rows: unknown[]) {
+  const div = document.createElement("div");
+  const title = document.createElement("strong");
+  title.textContent = String(titleText);
+  div.append(title);
+  for (const row of rows) {
+    div.append(document.createElement("br"), document.createTextNode(String(row)));
+  }
+  return div;
+}
+
 type ExampleId =
   | "getting-started"
   | "axis-grid"
@@ -930,8 +941,7 @@ function runEventsApi() {
       pushLog(`select total=${event.totalPoints} traces=${event.points.length}`);
     },
     tooltip: {
-      renderer: (ctx) =>
-        `<strong>${ctx.trace.name ?? "Trace"}</strong><br/>i=${ctx.pointIndex}<br/>x=${ctx.x}<br/>y=${ctx.y}`
+      renderer: (ctx) => makeTooltipNode(ctx.trace.name ?? "Trace", [`i=${ctx.pointIndex}`, `x=${ctx.x}`, `y=${ctx.y}`])
     }
   });
 
@@ -2407,7 +2417,7 @@ function runBarTime() {
       }
     ],
     tooltip: {
-      renderer: (ctx) => `<strong>${ctx.trace.name ?? "trace"}</strong><br/>${ctx.x}<br/>${ctx.y}`
+      renderer: (ctx) => makeTooltipNode(ctx.trace.name ?? "trace", [ctx.x, ctx.y])
     }
   });
 
