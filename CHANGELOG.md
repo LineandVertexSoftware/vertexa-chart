@@ -15,6 +15,7 @@
   demo builds, visual snapshots, and performance thresholds.
 - Made the monorepo root private so package publishing goes through the
   workspace publish flow.
+- Added explicit release-candidate version and `next` publish scripts.
 
 ## 0.2.0 - 2026-08-23
 

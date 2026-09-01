@@ -38,11 +38,22 @@ const packages = [
     requiredFiles: ["package.json", "README.md", "LICENSE", "dist/index.js", "dist/index.d.ts"],
     verify(root) {
       const manifest = readJson(join(root, "package.json"));
+      const workspaceDependencyDirs = {
+        "@lineandvertexsoftware/overlay-d3": "packages/overlay-d3",
+        "@lineandvertexsoftware/renderer-webgpu": "packages/renderer-webgpu"
+      };
       for (const [name, version] of Object.entries(manifest.dependencies ?? {})) {
         assert(
           !String(version).startsWith("workspace:"),
           `${manifest.name} dependency ${name} should be rewritten from workspace protocol`
         );
+        if (workspaceDependencyDirs[name]) {
+          const sourceManifest = readJson(join(rootDir, workspaceDependencyDirs[name], "package.json"));
+          assert(
+            version === sourceManifest.version,
+            `${manifest.name} dependency ${name} should resolve to ${sourceManifest.version}, got ${version}`
+          );
+        }
       }
     }
   }

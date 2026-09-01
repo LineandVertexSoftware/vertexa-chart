@@ -144,13 +144,36 @@ machines.
 After the Node 22 and Node 24 gates pass and the version/changelog are
 committed:
 
+For a release candidate:
+
 ```bash
 npm login
 npm whoami
+pnpm version:1.0.0-rc
+pnpm release:check:full
+pnpm pack:install-check
+git commit -am "Prepare 1.0.0 release candidate"
+pnpm publish:packages:next
+git tag v1.0.0-rc.0
+git push origin HEAD --tags
+```
+
+For the stable release:
+
+```bash
+npm login
+npm whoami
+pnpm version:1.0.0
+pnpm release:check:full
+pnpm pack:install-check
+git commit -am "Release 1.0.0"
 pnpm publish:packages
-git tag v<version>
+git tag v1.0.0
 git push origin HEAD --tags
 ```
 
 Do not publish from the repo root with plain `npm publish`; use the workspace
 publish script so all publishable packages are handled consistently.
+The publish scripts publish `renderer-webgpu` and `overlay-d3` before
+`vertexa-chart`, so the primary package's internal dependencies are available
+before it is published.
