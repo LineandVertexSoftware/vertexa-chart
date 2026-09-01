@@ -15,6 +15,7 @@
     "test": "pnpm -r test",
     "pack:check": "pnpm -r --filter './packages/**' exec npm pack --dry-run",
     "pack:install-check": "node scripts/pack-install-check.mjs",
+    "release:preflight": "node scripts/release-preflight.mjs",
     "release:check": "node scripts/release-check.mjs",
     "release:check:full": "node scripts/release-check.mjs --full",
     "test:visual": "pnpm -C apps/demo test:visual",

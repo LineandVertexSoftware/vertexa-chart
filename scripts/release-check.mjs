@@ -13,7 +13,7 @@ if (help) {
 Runs the local release gate.
 
 Default:
-  clean, install --frozen-lockfile, build, typecheck, test, pack:check
+  release preflight, clean, install --frozen-lockfile, build, typecheck, test, pack:check
 
 With --full:
   also run demo build, visual snapshots, demo benchmark, and performance thresholds
@@ -64,6 +64,7 @@ function output(command, args) {
 console.log(`Node: ${process.version}`);
 console.log(`pnpm: ${output("pnpm", ["-v"])}`);
 
+run("pnpm", ["release:preflight"]);
 run("pnpm", ["clean"]);
 run("pnpm", ["install", "--frozen-lockfile"]);
 run("pnpm", ["build"]);

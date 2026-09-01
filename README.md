@@ -390,7 +390,7 @@ apps/
   demo               — Vite dev app with 9 runnable examples
 ```
 
-Internal packages (`renderer-webgpu`, `overlay-d3`) are published separately but are intended as implementation details of `vertexa-chart`.
+Advanced packages (`renderer-webgpu`, `overlay-d3`) are published separately for direct use, but most applications should start with `vertexa-chart`.
 
 ---
 

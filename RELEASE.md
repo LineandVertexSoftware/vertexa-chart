@@ -42,6 +42,7 @@ pnpm release:check
 The script refuses to run outside Node 22/24 unless
 `ALLOW_UNSUPPORTED_NODE=1` is set. It runs:
 
+- `pnpm release:preflight`
 - `pnpm clean`
 - `pnpm install --frozen-lockfile`
 - `pnpm build`

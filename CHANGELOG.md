@@ -13,6 +13,8 @@
   states.
 - Added release gates for Node 22 and Node 24, package install smoke tests,
   demo builds, visual snapshots, and performance thresholds.
+- Added release preflight checks for package metadata, version alignment, and
+  publish-script shape.
 - Made the monorepo root private so package publishing goes through the
   workspace publish flow.
 - Added explicit release-candidate version and `next` publish scripts.

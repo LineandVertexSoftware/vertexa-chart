@@ -14,8 +14,8 @@ npm install @lineandvertexsoftware/renderer-webgpu
 import { WebGPURenderer } from "@lineandvertexsoftware/renderer-webgpu";
 ```
 
-This package is primarily intended as an internal rendering module for
-`@lineandvertexsoftware/vertexa-chart`.
+This is an advanced package for direct WebGPU rendering usage. Most applications
+should start with `@lineandvertexsoftware/vertexa-chart`.
 
 The supported package contract is documented in the monorepo:
 [https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/PUBLIC_CONTRACT.md](https://github.com/LineandVertexSoftware/vertexa-chart/blob/main/PUBLIC_CONTRACT.md)
