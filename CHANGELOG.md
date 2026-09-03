@@ -15,6 +15,7 @@
   demo builds, visual snapshots, and performance thresholds.
 - Added release preflight checks for package metadata, version alignment, and
   publish-script shape.
+- Added a manual browser smoke checklist for release candidates.
 - Made the monorepo root private so package publishing goes through the
   workspace publish flow.
 - Added explicit release-candidate version and `next` publish scripts.

@@ -140,6 +140,32 @@ This fuller benchmark is useful before a release candidate, but it is not part
 of `pnpm release:check:full` because it takes longer and is noisier on local
 machines.
 
+## Manual RC Smoke Pass
+
+Before publishing a release candidate, do one browser pass against the demo app:
+
+```bash
+pnpm dev
+```
+
+Check the current demo in Chrome stable. If the release targets Windows users,
+repeat the same pass in Edge:
+
+- Open `getting-started`, `events-api`, `bar-time`, `area-basics`,
+  `histogram-basics`, `heatmap-basics`, and `visual-matrix`.
+- Confirm the chart renders, resizes with the viewport, and responds to
+  wheel/pinch zoom and drag pan where supported.
+- Confirm hover or tap/click callbacks report the expected trace and point.
+- Confirm legend toggles, range controls, selection UI, and toolbar buttons
+  still work in the richer demo routes.
+- Export PNG, SVG, and CSV from the toolbar and inspect the downloaded files.
+- On one touch device or simulator, confirm one-finger pan and two-finger pinch
+  zoom in the plot area. Dedicated touch selection gestures are not part of the
+  `1.0` contract.
+
+Record any intentional release notes or browser caveats in `CHANGELOG.md`
+before publishing.
+
 ## Publish
 
 After the Node 22 and Node 24 gates pass and the version/changelog are
